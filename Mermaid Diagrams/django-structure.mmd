@@ -1,0 +1,23 @@
+flowchart TD
+    A[Paper Trading App]
+
+    A --> B[manage.py]
+    A --> C[db.sqlite3]
+    A --> D[config]
+    A --> E[trading]
+
+    D --> D1[__init__.py]
+    D --> D2[settings.py]
+    D --> D3[urls.py]
+    D --> D4[asgi.py]
+    D --> D5[wsgi.py]
+
+    E --> E1[__init__.py]
+    E --> E2[admin.py]
+    E --> E3[apps.py]
+    E --> E4[models.py]
+    E --> E5[tests.py]
+    E --> E6[views.py]
+    E --> E7[migrations]
+
+    E7 --> E71[__init__.py]
