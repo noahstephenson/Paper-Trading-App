@@ -1,0 +1,21 @@
+flowchart LR
+    User([User])
+
+    subgraph App["Django Paper Trading MVP"]
+        direction TB
+        Register([Register account])
+        Login([Log in])
+        Search([Search ticker])
+        ViewData([View stock page])
+        Buy([Buy stock])
+        Sell([Sell stock])
+        Portfolio([View portfolio page])
+    end
+
+    User --> Register
+    User --> Login
+    User --> Search
+    User --> ViewData
+    User --> Buy
+    User --> Sell
+    User --> Portfolio

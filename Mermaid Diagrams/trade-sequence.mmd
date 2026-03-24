@@ -1,0 +1,28 @@
+sequenceDiagram
+    actor User
+    participant BuyStockView
+    participant TradeService
+    participant MarketDataService
+    participant PortfolioDB as Portfolio Models
+
+    User->>BuyStockView: Submit buy form
+    BuyStockView->>TradeService: buy_stock(user, ticker, shares)
+
+    TradeService->>MarketDataService: Validate ticker
+    alt Invalid ticker
+        TradeService-->>BuyStockView: Return form error
+        BuyStockView-->>User: Render error
+    else Valid ticker
+        TradeService->>MarketDataService: Get current price
+
+        TradeService->>PortfolioDB: Check cash balance
+
+        alt Insufficient cash
+            TradeService-->>BuyStockView: Return form error
+            BuyStockView-->>User: Render error
+        else Enough cash
+            TradeService->>PortfolioDB: Save trade and update position
+            TradeService-->>BuyStockView: Success
+            BuyStockView-->>User: Redirect to portfolio page
+        end
+    end

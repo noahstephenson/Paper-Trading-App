@@ -1,0 +1,11 @@
+flowchart LR
+    User([User]) --> Views[Django Views]
+
+    Views --> TradeService[TradeService]
+    Views --> MarketDataService[MarketDataService]
+    Views --> Data[(Django Models: Portfolio / Position / Trade)]
+
+    TradeService --> MarketDataService
+    TradeService --> Data
+
+    MarketDataService --> YFinance[yfinance]

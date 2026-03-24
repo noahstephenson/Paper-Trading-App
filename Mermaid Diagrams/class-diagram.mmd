@@ -1,0 +1,46 @@
+classDiagram
+    %% Conceptual MVP diagram for a Django paper trading app.
+    %% Focus on the main Django models and service classes.
+    %% The domain classes stay centered; services are kept separate for readability.
+    direction TB
+
+    class User {
+        +username
+        +email
+    }
+
+    class Portfolio {
+        +cash_balance
+        +get_total_value()
+    }
+
+    class Position {
+        +ticker
+        +shares
+        +average_price
+    }
+
+    class Trade {
+        +ticker
+        +trade_type
+        +shares
+        +price
+        +timestamp
+    }
+
+    class MarketDataService {
+        +is_valid_ticker(ticker)
+        +get_current_price(ticker)
+    }
+
+    class TradeService {
+        +buy_stock(user, ticker, shares)
+        +sell_stock(user, ticker, shares)
+    }
+
+    User "1" --> "1" Portfolio : owns
+    Portfolio "1" --> "0..*" Position : holds
+    Portfolio "1" --> "0..*" Trade : records
+
+    TradeService ..> MarketDataService : uses
+    TradeService ..> Portfolio : updates

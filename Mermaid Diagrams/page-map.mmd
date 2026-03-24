@@ -1,0 +1,21 @@
+flowchart TD
+    Home([Home page])
+    Register([Register page])
+    Login([Login page])
+    Search([Search Stock page])
+    Portfolio([Portfolio page])
+    Result([Trade result / error page])
+
+    Home --> Register
+    Home --> Login
+
+    Login --> Search
+    Login --> Portfolio
+
+    Search --> Result
+    Search --> Portfolio
+
+    Result --> Search
+    Result --> Portfolio
+
+    Portfolio --> Search
