@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Search Ticker</title>
+</head>
+<body>
+    <h1>Search for a Stock</h1>
+    <p>This page will let users search for a ticker symbol.</p>
+
+<form method="get">
+    <label for="ticker">Ticker Symbol:</label>
+    <input type="text" id="ticker" name="ticker">
+    <button type="submit">Search</button>
+</form>
+{% if ticker %}
+    <p>You searched for: {{ ticker }}</p>
+{% endif %}
+
+{% if price %}
+    <p>Current price: ${{ price }}</p>
+{% endif %}
+</body>
+</html>
