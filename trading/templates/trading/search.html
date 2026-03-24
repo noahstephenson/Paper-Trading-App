@@ -10,7 +10,7 @@
 
 <form method="get">
     <label for="ticker">Ticker Symbol:</label>
-    <input type="text" id="ticker" name="ticker">
+    <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}">
     <button type="submit">Search</button>
 </form>
 {% if ticker %}
@@ -19,6 +19,10 @@
 
 {% if price %}
     <p>Current price: ${{ price }}</p>
+{% endif %}
+
+{% if error_message %}
+    <p>{{ error_message }}</p>
 {% endif %}
 </body>
 </html>

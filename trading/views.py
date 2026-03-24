@@ -12,17 +12,25 @@ def search(request):
     """Handle ticker search and fetch stock data."""
     ticker = None
     price = None
+    error_message = None
 
     if 'ticker' in request.GET:
-        ticker = request.GET['ticker']
+        # Clean up the user's input so we search with a simple ticker value.
+        ticker = request.GET['ticker'].strip().upper()
 
-        stock = yf.Ticker(ticker)
-        data = stock.history(period='1d')
+        if ticker:
+            stock = yf.Ticker(ticker)
+            data = stock.history(period='1d')
 
-        if not data.empty:
-            price = data['Close'].iloc[-1]
+            if not data.empty:
+                price = data['Close'].iloc[-1]
+            else:
+                error_message = 'No stock data was found for that ticker.'
+        else:
+            error_message = 'Please enter a ticker symbol.'
 
     return render(request, 'trading/search.html', {
         'ticker': ticker,
-        'price': price
+        'price': price,
+        'error_message': error_message,
     })
