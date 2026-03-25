@@ -139,9 +139,27 @@ def portfolio(request):
     for ticker, shares in holdings.items():
         # Only show tickers where the user still owns shares.
         if shares > 0:
+            current_price = None
+            total_value = None
+
+            try:
+                # Load the latest closing price for this ticker.
+                stock = yf.Ticker(ticker)
+                data = stock.history(period='1d')
+
+                if not data.empty:
+                    current_price = round(float(data['Close'].iloc[-1]), 2)
+                    total_value = round(shares * current_price, 2)
+            except Exception:
+                # Keep the page working even if price data is unavailable.
+                current_price = None
+                total_value = None
+
             portfolio_rows.append({
                 'ticker': ticker,
                 'shares': shares,
+                'current_price': current_price,
+                'total_value': total_value,
             })
 
     return render(request, 'trading/portfolio.html', {

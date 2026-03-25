@@ -13,11 +13,27 @@
             <tr>
                 <th>Ticker</th>
                 <th>Shares Owned</th>
+                <th>Current Price</th>
+                <th>Total Value</th>
             </tr>
             {% for row in portfolio_rows %}
                 <tr>
                     <td>{{ row.ticker }}</td>
                     <td>{{ row.shares }}</td>
+                    <td>
+                        {% if row.current_price %}
+                            ${{ row.current_price }}
+                        {% else %}
+                            Price unavailable
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.total_value %}
+                            ${{ row.total_value }}
+                        {% else %}
+                            Value unavailable
+                        {% endif %}
+                    </td>
                 </tr>
             {% endfor %}
         </table>
