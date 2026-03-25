@@ -8,23 +8,31 @@
     <h1>Search for a Stock</h1>
     <p>This page will let users search for a ticker symbol.</p>
 
-<form method="get">
-    <label for="ticker">Ticker Symbol:</label>
-    <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}">
-    <button type="submit">Search</button>
-</form>
-{% if ticker %}
-    <p>You searched for: {{ ticker }}</p>
-{% endif %}
+    <!-- Keep the main navigation the same on every page. -->
+    <p>
+        <a href="/">Home</a> |
+        <a href="/search/">Search</a> |
+        <a href="/trade/new/">New Trade</a> |
+        <a href="/trades/">Trade History</a> |
+        <a href="/portfolio/">Portfolio</a>
+    </p>
 
-{% if price %}
-    <p>Current price: ${{ price }}</p>
-{% endif %}
+    <form method="get">
+        <label for="ticker">Ticker Symbol:</label>
+        <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}">
+        <button type="submit">Search</button>
+    </form>
 
-{% if error_message %}
-    <p>{{ error_message }}</p>
-{% endif %}
+    {% if ticker %}
+        <p>You searched for: {{ ticker }}</p>
+    {% endif %}
 
-<a href="/">Back to Home</a>
+    {% if price %}
+        <p>Current price: ${{ price }}</p>
+    {% endif %}
+
+    {% if error_message %}
+        <p>{{ error_message }}</p>
+    {% endif %}
 </body>
 </html>

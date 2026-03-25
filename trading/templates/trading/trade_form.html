@@ -9,6 +9,15 @@
     <p>Use this form to save a buy or sell trade in the database.</p>
     <p>The app will fetch the current market price automatically when you submit the trade.</p>
 
+    <!-- Keep the main navigation the same on every page. -->
+    <p>
+        <a href="/">Home</a> |
+        <a href="/search/">Search</a> |
+        <a href="/trade/new/">New Trade</a> |
+        <a href="/trades/">Trade History</a> |
+        <a href="/portfolio/">Portfolio</a>
+    </p>
+
     <form method="post">
         <!-- Django requires a CSRF token for POST forms. -->
         {% csrf_token %}
@@ -38,7 +47,5 @@
     {% if error_message %}
         <p>{{ error_message }}</p>
     {% endif %}
-
-    <a href="/">Back to Home</a>
 </body>
 </html>

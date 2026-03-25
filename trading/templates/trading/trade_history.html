@@ -8,6 +8,15 @@
     <h1>Trade History</h1>
     <p>This page shows the trades saved in the database.</p>
 
+    <!-- Keep the main navigation the same on every page. -->
+    <p>
+        <a href="/">Home</a> |
+        <a href="/search/">Search</a> |
+        <a href="/trade/new/">New Trade</a> |
+        <a href="/trades/">Trade History</a> |
+        <a href="/portfolio/">Portfolio</a>
+    </p>
+
     {% if trades %}
         <table border="1">
             <tr>
@@ -31,7 +40,5 @@
         <p>No trades have been saved yet.</p>
     {% endif %}
 
-    <br>
-    <a href="/">Back to Home</a>
 </body>
 </html>
