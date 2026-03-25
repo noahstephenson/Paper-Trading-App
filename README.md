@@ -14,6 +14,12 @@ I kept the project intentionally small. The goal was not to build a full trading
 - shows a trade history page with past transactions
 - lets me inspect saved data in Django admin
 
+## Why I Built It This Way
+
+I wanted this project to stay at a level that made sense for a class MVP. Instead of adding a lot of extra architecture, I kept it centered around Django views, templates, one main `Trade` model, and SQLite. That made it easier to build, easier to debug, and easier to explain.
+
+The Mermaid diagrams below are there to make the app flow and page structure easier to understand at a glance.
+
 ## Main Pages
 
 | Page | Route | What it is for |
@@ -58,6 +64,50 @@ flowchart TD
     Trade --> Portfolio
     History --> Portfolio
     Portfolio --> Search
+```
+
+## App Structure
+
+At a high level, the app is just Django views talking to templates, the `Trade` model, Django auth, and `yfinance`.
+
+```mermaid
+flowchart LR
+    User([User]) --> Home[Home Page]
+    User --> Auth[Login / Register]
+    User --> TradingViews[Django Trading Views]
+    Admin([Admin User]) --> AdminSite[Django Admin]
+
+    TradingViews --> Templates[Simple HTML Templates]
+    TradingViews --> TradeModel[(Trade Model)]
+    TradingViews --> MarketData[yfinance]
+    TradingViews --> AuthSystem[Django Auth]
+
+    TradeModel --> SQLite[(SQLite Database)]
+    AdminSite --> TradeModel
+```
+
+## Stored Data
+
+The data model is intentionally small. The app stores paper trades directly and calculates holdings from those trades instead of using extra portfolio tables.
+
+```mermaid
+classDiagram
+    direction TB
+
+    class User {
+        +username
+    }
+
+    class Trade {
+        +user
+        +ticker
+        +trade_type
+        +quantity
+        +price
+        +created_at
+    }
+
+    User "1" --> "0..*" Trade : owns
 ```
 
 ## Main User Flow
@@ -207,6 +257,18 @@ It does not include:
 - machine learning or recommendations
 
 The main idea was to keep the code understandable and focused on core Django concepts like routing, views, templates, models, forms, authentication, and database persistence.
+
+## Mermaid Diagram Files
+
+The full set of Mermaid source files is kept in the [`Mermaid Diagrams`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams) folder:
+
+- [`app-structure-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\app-structure-diagram.mmd)
+- [`class-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\class-diagram.mmd)
+- [`django-structure.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\django-structure.mmd)
+- [`mvp-user-flow.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\mvp-user-flow.mmd)
+- [`page-map.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\page-map.mmd)
+- [`trade-sequence.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\trade-sequence.mmd)
+- [`use-case-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\use-case-diagram.mmd)
 
 ## Author
 

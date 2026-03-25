@@ -10,32 +10,39 @@
 
     <!-- Keep the main navigation the same on every page. -->
     <p>
-        <a href="/">Home</a> |
-        <a href="/search/">Search</a> |
-        <a href="/trade/new/">New Trade</a> |
-        <a href="/trades/">Trade History</a> |
-        <a href="/portfolio/">Portfolio</a> |
         {% if user.is_authenticated %}
+            <a href="/">Home</a> |
+            <a href="/search/">Search</a> |
+            <a href="/trade/new/">New Trade</a> |
+            <a href="/trades/">Trade History</a> |
+            <a href="/portfolio/">Portfolio</a> |
             <form method="post" action="{% url 'logout' %}" style="display: inline;">
                 {% csrf_token %}
                 <button type="submit">Log Out</button>
             </form>
         {% else %}
-            <a href="{% url 'login' %}">Log In</a>
+            <a href="/">Home</a> |
+            <a href="{% url 'login' %}">Log In</a> |
+            <a href="{% url 'register' %}">Create Account</a> |
+            <a href="/admin/">Admin</a>
         {% endif %}
     </p>
 
-    <h2>Quick Summary</h2>
-    <p>Starting Cash: ${{ starting_cash|floatformat:2 }}</p>
-    <p>Saved Trades: {{ trade_count }}</p>
-    <p>Active Holdings: {{ active_holdings_count }}</p>
-
-    <h2>How to Use This App</h2>
     {% if user.is_authenticated %}
+        <h2>Quick Summary</h2>
+        <p>Starting Cash: ${{ starting_cash|floatformat:2 }}</p>
+        <p>Saved Trades: {{ trade_count }}</p>
+        <p>Active Holdings: {{ active_holdings_count }}</p>
+
+        <h2>How to Use This App</h2>
         <p>1. Search for a ticker to view a recent stock price.</p>
         <p>2. Save a BUY or SELL trade on the New Trade page.</p>
         <p>3. Review your trades and portfolio summary.</p>
     {% else %}
+        <h2>Welcome</h2>
+        <p>Create an account or log in to access your personal paper trading dashboard.</p>
+
+        <h2>What You Can Do</h2>
         <p>1. Log in to access your paper trading account.</p>
         <p>2. Search for a ticker and save BUY or SELL trades.</p>
         <p>3. Review your own trade history and portfolio summary.</p>
