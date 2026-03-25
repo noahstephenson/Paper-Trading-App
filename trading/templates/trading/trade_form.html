@@ -15,7 +15,11 @@
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
         <a href="/trades/">Trade History</a> |
-        <a href="/portfolio/">Portfolio</a>
+        <a href="/portfolio/">Portfolio</a> |
+        <form method="post" action="{% url 'logout' %}" style="display: inline;">
+            {% csrf_token %}
+            <button type="submit">Log Out</button>
+        </form>
     </p>
 
     <form method="post">

@@ -1,7 +1,13 @@
+from django.contrib.auth import get_user_model
 from django.db import models
 
 
+User = get_user_model()
+
+
 class Trade(models.Model):
+    # Each paper trade belongs to one logged-in user.
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
     # These choices limit trade_type to the two actions we support.
     BUY = 'BUY'
     SELL = 'SELL'

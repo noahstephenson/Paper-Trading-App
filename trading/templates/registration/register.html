@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Create Account</title>
+</head>
+<body>
+    <h1>Create Account</h1>
+    <p>Create a simple account to use your own paper trading data.</p>
+
+    <p>
+        <a href="/">Home</a> |
+        <a href="{% url 'login' %}">Log In</a>
+    </p>
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create Account</button>
+    </form>
+</body>
+</html>

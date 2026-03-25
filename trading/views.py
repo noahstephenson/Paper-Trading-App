@@ -1,17 +1,24 @@
 from decimal import Decimal
 
+from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 import yfinance as yf
 
 from .models import Trade
 # Create your views here.
 
+VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
+
 
 
 def index(request):
     """Home page for the paper trading app."""
     starting_cash = Decimal('10000.00')
-    trades = Trade.objects.all()
+    if request.user.is_authenticated:
+        trades = Trade.objects.filter(user=request.user)
+    else:
+        trades = Trade.objects.none()
     trade_count = trades.count()
     holdings = {}
 
@@ -32,6 +39,26 @@ def index(request):
         'active_holdings_count': active_holdings_count,
     })
 
+
+def register(request):
+    """Allow a new user to create a simple account."""
+    if request.user.is_authenticated:
+        return redirect('trading:index')
+
+    if request.method == 'POST':
+        form = UserCreationForm(data=request.POST)
+
+        if form.is_valid():
+            form.save()
+            return redirect('/accounts/login/?registered=1')
+    else:
+        form = UserCreationForm()
+
+    return render(request, 'registration/register.html', {
+        'form': form,
+    })
+
+@login_required
 def search(request):
     """Handle ticker search and fetch stock data."""
     ticker = None
@@ -63,6 +90,7 @@ def search(request):
     })
 
 
+@login_required
 def create_trade(request):
     """Show a simple form and save a paper trade."""
     # Start the paper trading account with a simple fixed cash amount.
@@ -81,72 +109,79 @@ def create_trade(request):
 
         # Make sure the form is filled in before we try to save.
         if ticker and trade_type and quantity:
-            try:
-                quantity_value = int(quantity)
+            if trade_type not in VALID_TRADE_TYPES:
+                error_message = 'Choose a valid trade type.'
+            else:
+                try:
+                    quantity_value = int(quantity)
 
-                if quantity_value > 0:
-                    # Fetch the current market price automatically for the trade.
-                    price_value = None
+                    if quantity_value > 0:
+                        # Fetch the current market price automatically for the trade.
+                        price_value = None
 
-                    try:
-                        stock = yf.Ticker(ticker)
-                        data = stock.history(period='1d')
+                        try:
+                            stock = yf.Ticker(ticker)
+                            data = stock.history(period='1d')
 
-                        if not data.empty:
-                            latest_price = round(float(data['Close'].iloc[-1]), 2)
-                            price_value = Decimal(str(latest_price))
-                        else:
-                            error_message = 'Could not fetch a current price for that ticker.'
-                    except Exception:
-                        error_message = 'Could not fetch a current price right now.'
+                            if not data.empty:
+                                latest_price = round(float(data['Close'].iloc[-1]), 2)
+                                price_value = Decimal(str(latest_price))
+                            else:
+                                error_message = 'Could not fetch a current price for that ticker.'
+                        except Exception:
+                            error_message = 'Could not fetch a current price right now.'
 
-                    if price_value is not None:
-                        # Work out the current cash balance before saving a new trade.
-                        cash_balance = starting_cash
-                        all_trades = Trade.objects.all()
+                        if price_value is not None:
+                            # Work out the current cash balance before saving a new trade.
+                            cash_balance = starting_cash
+                            all_trades = Trade.objects.filter(user=request.user)
 
-                        for trade in all_trades:
-                            trade_total = trade.quantity * trade.price
+                            for trade in all_trades:
+                                trade_total = trade.quantity * trade.price
 
-                            if trade.trade_type == 'BUY':
-                                cash_balance -= trade_total
-                            elif trade.trade_type == 'SELL':
-                                cash_balance += trade_total
+                                if trade.trade_type == 'BUY':
+                                    cash_balance -= trade_total
+                                elif trade.trade_type == 'SELL':
+                                    cash_balance += trade_total
 
-                        # Count current shares for this ticker before saving a sell.
-                        current_shares = 0
-                        existing_trades = Trade.objects.filter(ticker=ticker)
-
-                        for trade in existing_trades:
-                            if trade.trade_type == 'BUY':
-                                current_shares += trade.quantity
-                            elif trade.trade_type == 'SELL':
-                                current_shares -= trade.quantity
-
-                        # Block sells that are larger than the shares owned.
-                        if trade_type == 'SELL' and quantity_value > current_shares:
-                            error_message = 'You cannot sell more shares than you currently own.'
-                        # Block buys that cost more cash than is available.
-                        elif trade_type == 'BUY' and (quantity_value * price_value) > cash_balance:
-                            error_message = 'You do not have enough cash to make that purchase.'
-                        else:
-                            # Save one row in the Trade table using the fetched price.
-                            Trade.objects.create(
+                            # Count current shares for this ticker before saving a sell.
+                            current_shares = 0
+                            existing_trades = Trade.objects.filter(
+                                user=request.user,
                                 ticker=ticker,
-                                trade_type=trade_type,
-                                quantity=quantity_value,
-                                price=price_value,
                             )
-                            success_message = f'Trade saved successfully at ${price_value} per share.'
 
-                            # Clear the form after a successful save.
-                            ticker = ''
-                            trade_type = 'BUY'
-                            quantity = ''
-                else:
-                    error_message = 'Quantity must be greater than zero.'
-            except ValueError:
-                error_message = 'Enter a valid quantity.'
+                            for trade in existing_trades:
+                                if trade.trade_type == 'BUY':
+                                    current_shares += trade.quantity
+                                elif trade.trade_type == 'SELL':
+                                    current_shares -= trade.quantity
+
+                            # Block sells that are larger than the shares owned.
+                            if trade_type == 'SELL' and quantity_value > current_shares:
+                                error_message = 'You cannot sell more shares than you currently own.'
+                            # Block buys that cost more cash than is available.
+                            elif trade_type == 'BUY' and (quantity_value * price_value) > cash_balance:
+                                error_message = 'You do not have enough cash to make that purchase.'
+                            else:
+                                # Save one row in the Trade table using the fetched price.
+                                Trade.objects.create(
+                                    user=request.user,
+                                    ticker=ticker,
+                                    trade_type=trade_type,
+                                    quantity=quantity_value,
+                                    price=price_value,
+                                )
+                                success_message = f'Trade saved successfully at ${price_value} per share.'
+
+                                # Clear the form after a successful save.
+                                ticker = ''
+                                trade_type = 'BUY'
+                                quantity = ''
+                    else:
+                        error_message = 'Quantity must be greater than zero.'
+                except ValueError:
+                    error_message = 'Enter a valid quantity.'
         else:
             error_message = 'Please fill in every field.'
 
@@ -159,22 +194,24 @@ def create_trade(request):
     })
 
 
+@login_required
 def trade_history(request):
     """Show all saved trades, newest first."""
     # Load trades from the database so the template can display them.
-    trades = Trade.objects.order_by('-created_at')
+    trades = Trade.objects.filter(user=request.user).order_by('-created_at')
 
     return render(request, 'trading/trade_history.html', {
         'trades': trades,
     })
 
 
+@login_required
 def portfolio(request):
     """Show current holdings based on saved trades."""
     # Show a simple message after clearing trades.
     trades_cleared = request.GET.get('demo') == 'cleared'
     # Start with all saved trades in the database.
-    trades = Trade.objects.order_by('ticker', 'created_at')
+    trades = Trade.objects.filter(user=request.user).order_by('ticker', 'created_at')
     holdings = {}
     # Give the paper trading account a simple starting cash amount.
     starting_cash = Decimal('10000.00')
@@ -269,11 +306,12 @@ def portfolio(request):
     })
 
 
+@login_required
 def clear_trades(request):
     """Delete all trades so the app returns to an empty state."""
     if request.method == 'POST':
         # Remove all saved trades from the database.
-        Trade.objects.all().delete()
+        Trade.objects.filter(user=request.user).delete()
         return redirect('/portfolio/?demo=cleared')
 
     return redirect('trading:index')

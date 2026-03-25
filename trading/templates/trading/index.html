@@ -14,7 +14,15 @@
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
         <a href="/trades/">Trade History</a> |
-        <a href="/portfolio/">Portfolio</a>
+        <a href="/portfolio/">Portfolio</a> |
+        {% if user.is_authenticated %}
+            <form method="post" action="{% url 'logout' %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit">Log Out</button>
+            </form>
+        {% else %}
+            <a href="{% url 'login' %}">Log In</a>
+        {% endif %}
     </p>
 
     <h2>Quick Summary</h2>
@@ -23,15 +31,25 @@
     <p>Active Holdings: {{ active_holdings_count }}</p>
 
     <h2>How to Use This App</h2>
-    <p>1. Search for a ticker to view a recent stock price.</p>
-    <p>2. Save a BUY or SELL trade on the New Trade page.</p>
-    <p>3. Review your trades and portfolio summary.</p>
+    {% if user.is_authenticated %}
+        <p>1. Search for a ticker to view a recent stock price.</p>
+        <p>2. Save a BUY or SELL trade on the New Trade page.</p>
+        <p>3. Review your trades and portfolio summary.</p>
+    {% else %}
+        <p>1. Log in to access your paper trading account.</p>
+        <p>2. Search for a ticker and save BUY or SELL trades.</p>
+        <p>3. Review your own trade history and portfolio summary.</p>
+        <p><a href="{% url 'login' %}">Log In to Start Trading</a></p>
+        <p><a href="{% url 'register' %}">Create an Account</a></p>
+    {% endif %}
     <br>
 
-    <form method="post" action="/demo/clear/">
-        <!-- This button removes every saved trade. -->
-        {% csrf_token %}
-        <button type="submit">Clear All Trades</button>
-    </form>
+    {% if user.is_authenticated %}
+        <form method="post" action="/demo/clear/">
+            <!-- This button removes every saved trade. -->
+            {% csrf_token %}
+            <button type="submit">Clear All Trades</button>
+        </form>
+    {% endif %}
 </body>
 </html>

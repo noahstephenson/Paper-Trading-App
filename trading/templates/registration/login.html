@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Log In</title>
+</head>
+<body>
+    <h1>Log In</h1>
+    <p>Log in to access your paper trading account.</p>
+
+    <p>
+        <a href="/">Home</a> |
+        <a href="/admin/">Admin</a> |
+        <a href="{% url 'register' %}">Create Account</a>
+    </p>
+
+    {% if form.errors %}
+        <p>Your username and password did not match. Please try again.</p>
+    {% endif %}
+
+    {% if request.GET.registered %}
+        <p>Your account was created successfully. You can log in now.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        {% if next %}
+            <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
+        <button type="submit">Log In</button>
+    </form>
+</body>
+</html>
