@@ -109,3 +109,31 @@ class TradingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Trade.objects.count(), 0)
         self.assertContains(response, 'All trades were cleared successfully.')
+
+    @patch('trading.views.yf.Ticker')
+    def test_portfolio_shows_average_cost_basis(self, mock_ticker):
+        """The portfolio page should show the weighted average cost per share."""
+        Trade.objects.create(
+            ticker='AAPL',
+            trade_type='BUY',
+            quantity=2,
+            price=Decimal('100.00'),
+        )
+        Trade.objects.create(
+            ticker='AAPL',
+            trade_type='BUY',
+            quantity=1,
+            price=Decimal('160.00'),
+        )
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [150.00],
+        })
+
+        response = self.client.get('/portfolio/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'AAPL')
+        self.assertContains(response, '<td>3</td>', html=True)
+        self.assertContains(response, '$120.00')
+        self.assertContains(response, '$150.00')
+        self.assertContains(response, '$450.00')

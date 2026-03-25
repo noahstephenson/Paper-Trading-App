@@ -161,28 +161,42 @@ def portfolio(request):
     cash_balance = starting_cash
     total_holdings_value = Decimal('0.00')
 
-    # Go through each trade and update the running share total.
+    # Go through each trade and update the running share total and cost basis.
     for trade in trades:
         if trade.ticker not in holdings:
-            holdings[trade.ticker] = 0
+            holdings[trade.ticker] = {
+                'shares': 0,
+                'total_cost': Decimal('0.00'),
+            }
 
         # Calculate how much money this trade changes in the account.
         trade_total = trade.quantity * trade.price
 
         if trade.trade_type == 'BUY':
-            holdings[trade.ticker] += trade.quantity
+            holdings[trade.ticker]['shares'] += trade.quantity
+            holdings[trade.ticker]['total_cost'] += trade_total
             cash_balance -= trade_total
         elif trade.trade_type == 'SELL':
-            holdings[trade.ticker] -= trade.quantity
+            current_shares = holdings[trade.ticker]['shares']
+            current_total_cost = holdings[trade.ticker]['total_cost']
+
+            # Reduce remaining cost basis using the current average cost.
+            if current_shares > 0:
+                average_cost = current_total_cost / Decimal(current_shares)
+                holdings[trade.ticker]['total_cost'] -= average_cost * trade.quantity
+
+            holdings[trade.ticker]['shares'] -= trade.quantity
             cash_balance += trade_total
 
     # Convert the dictionary into a list the template can loop through.
     portfolio_rows = []
-    for ticker, shares in holdings.items():
+    for ticker, holding_data in holdings.items():
+        shares = holding_data['shares']
         # Only show tickers where the user still owns shares.
         if shares > 0:
             current_price = None
             total_value = None
+            average_cost = holding_data['total_cost'] / Decimal(shares)
 
             try:
                 # Load the latest closing price for this ticker.
@@ -202,6 +216,7 @@ def portfolio(request):
             portfolio_rows.append({
                 'ticker': ticker,
                 'shares': shares,
+                'average_cost': average_cost,
                 'current_price': current_price,
                 'total_value': total_value,
             })

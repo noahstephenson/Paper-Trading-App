@@ -31,6 +31,7 @@
             <tr>
                 <th>Ticker</th>
                 <th>Shares Owned</th>
+                <th>Average Cost</th>
                 <th>Current Price</th>
                 <th>Total Value</th>
             </tr>
@@ -38,6 +39,7 @@
                 <tr>
                     <td>{{ row.ticker }}</td>
                     <td>{{ row.shares }}</td>
+                    <td>${{ row.average_cost|floatformat:2 }}</td>
                     <td>
                         {% if row.current_price %}
                             ${{ row.current_price|floatformat:2 }}
