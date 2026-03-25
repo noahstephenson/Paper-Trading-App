@@ -260,15 +260,15 @@ The main idea was to keep the code understandable and focused on core Django con
 
 ## Mermaid Diagram Files
 
-The full set of Mermaid source files is kept in the [`Mermaid Diagrams`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams) folder:
+The full set of Mermaid source files is kept in the [Mermaid Diagrams](./Mermaid%20Diagrams/) folder:
 
-- [`app-structure-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\app-structure-diagram.mmd)
-- [`class-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\class-diagram.mmd)
-- [`django-structure.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\django-structure.mmd)
-- [`mvp-user-flow.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\mvp-user-flow.mmd)
-- [`page-map.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\page-map.mmd)
-- [`trade-sequence.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\trade-sequence.mmd)
-- [`use-case-diagram.mmd`](C:\Users\noahh\OneDrive\Documents\CY300\Paper-Trading-App\Mermaid Diagrams\use-case-diagram.mmd)
+- [app-structure-diagram.mmd](./Mermaid%20Diagrams/app-structure-diagram.mmd)
+- [class-diagram.mmd](./Mermaid%20Diagrams/class-diagram.mmd)
+- [django-structure.mmd](./Mermaid%20Diagrams/django-structure.mmd)
+- [mvp-user-flow.mmd](./Mermaid%20Diagrams/mvp-user-flow.mmd)
+- [page-map.mmd](./Mermaid%20Diagrams/page-map.mmd)
+- [trade-sequence.mmd](./Mermaid%20Diagrams/trade-sequence.mmd)
+- [use-case-diagram.mmd](./Mermaid%20Diagrams/use-case-diagram.mmd)
 
 ## Author
 
