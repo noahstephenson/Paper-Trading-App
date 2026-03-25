@@ -1,28 +1,24 @@
 sequenceDiagram
     actor User
-    participant BuyStockView
-    participant TradeService
-    participant MarketDataService
-    participant PortfolioDB as Portfolio Models
+    participant TradeView as create_trade view
+    participant YFinance as yfinance
+    participant TradeDB as Trade model / SQLite
 
-    User->>BuyStockView: Submit buy form
-    BuyStockView->>TradeService: buy_stock(user, ticker, shares)
+    User->>TradeView: Submit ticker, side, quantity
+    TradeView->>YFinance: Fetch current price
 
-    TradeService->>MarketDataService: Validate ticker
-    alt Invalid ticker
-        TradeService-->>BuyStockView: Return form error
-        BuyStockView-->>User: Render error
-    else Valid ticker
-        TradeService->>MarketDataService: Get current price
+    alt Invalid ticker or missing price
+        TradeView-->>User: Show error message
+    else Price found
+        TradeView->>TradeDB: Read user's past trades
+        TradeView->>TradeView: Validate trade type, quantity, cash, and shares
 
-        TradeService->>PortfolioDB: Check cash balance
-
-        alt Insufficient cash
-            TradeService-->>BuyStockView: Return form error
-            BuyStockView-->>User: Render error
-        else Enough cash
-            TradeService->>PortfolioDB: Save trade and update position
-            TradeService-->>BuyStockView: Success
-            BuyStockView-->>User: Redirect to portfolio page
+        alt Validation fails
+            TradeView-->>User: Show error message
+        else Trade is valid
+            TradeView-->>User: Show confirmation step
+            User->>TradeView: Confirm trade
+            TradeView->>TradeDB: Save trade
+            TradeView-->>User: Show success message
         end
     end

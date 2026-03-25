@@ -1,21 +1,23 @@
 flowchart TD
-    Open([Open Django app]) --> Auth([Register / Log in])
-    Auth --> Search([Search ticker])
+    Open([Open Django app]) --> Home([Home page])
+    Home --> LoggedIn{Logged in?}
+
+    LoggedIn -- No --> Auth([Register or log in])
+    LoggedIn -- Yes --> Search([Search ticker])
+    Auth --> Search
+
     Search --> Ticker{Valid ticker?}
-
     Ticker -- No --> Search
-    Ticker -- Yes --> Stock([View stock page])
+    Ticker -- Yes --> Price([View current price])
 
-    Stock --> Action{Buy or sell?}
+    Price --> TradePage([Open new trade page])
+    TradePage --> Submit([Submit trade details])
+    Submit --> Review([App fetches price and shows confirmation])
 
-    Action -- Buy --> SubmitBuy([Submit buy form])
-    SubmitBuy --> Cash{Enough cash?}
-    Cash -- No --> Stock
-    Cash -- Yes --> Update([Save trade and update portfolio])
+    Review --> Valid{Trade valid?}
+    Valid -- No --> TradePage
+    Valid -- Yes --> Confirm([Confirm trade])
 
-    Action -- Sell --> SubmitSell([Submit sell form])
-    SubmitSell --> Shares{Enough shares?}
-    Shares -- No --> Stock
-    Shares -- Yes --> Update
-
-    Update --> Portfolio([View portfolio page])
+    Confirm --> Save([Save trade to SQLite])
+    Save --> History([View trade history])
+    Save --> Portfolio([View portfolio])

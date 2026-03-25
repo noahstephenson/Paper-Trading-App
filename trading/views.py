@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
@@ -9,6 +9,41 @@ from .models import Trade
 # Create your views here.
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
+
+
+def fetch_latest_price(ticker):
+    """Return the latest available price for a ticker, or None."""
+    stock = yf.Ticker(ticker)
+    data = stock.history(period='1d')
+
+    if data.empty:
+        return None
+
+    latest_price = round(float(data['Close'].iloc[-1]), 2)
+    return Decimal(str(latest_price))
+
+
+def get_trade_balances(user, ticker, starting_cash):
+    """Calculate available cash and currently owned shares for one user."""
+    cash_balance = starting_cash
+    current_shares = 0
+    all_trades = Trade.objects.filter(user=user)
+
+    for trade in all_trades:
+        trade_total = trade.quantity * trade.price
+
+        if trade.trade_type == Trade.BUY:
+            cash_balance -= trade_total
+        elif trade.trade_type == Trade.SELL:
+            cash_balance += trade_total
+
+        if trade.ticker == ticker:
+            if trade.trade_type == Trade.BUY:
+                current_shares += trade.quantity
+            elif trade.trade_type == Trade.SELL:
+                current_shares -= trade.quantity
+
+    return cash_balance, current_shares
 
 
 
@@ -100,14 +135,19 @@ def create_trade(request):
     quantity = ''
     success_message = None
     error_message = None
+    confirm_trade = False
+    quoted_price = None
+    estimated_total = None
 
     if request.method == 'POST':
         # Read the values the user typed into the form.
         ticker = request.POST.get('ticker', '').strip().upper()
         trade_type = request.POST.get('trade_type', 'BUY')
         quantity = request.POST.get('quantity', '').strip()
+        # A normal submit reviews the trade first. Only the confirm button saves it.
+        form_action = request.POST.get('form_action', 'review')
 
-        # Make sure the form is filled in before we try to save.
+        # Make sure the form is filled in before we try to review or save.
         if ticker and trade_type and quantity:
             if trade_type not in VALID_TRADE_TYPES:
                 error_message = 'Choose a valid trade type.'
@@ -116,68 +156,76 @@ def create_trade(request):
                     quantity_value = int(quantity)
 
                     if quantity_value > 0:
-                        # Fetch the current market price automatically for the trade.
-                        price_value = None
+                        if form_action == 'confirm':
+                            quoted_price_value = request.POST.get('quoted_price', '').strip()
 
-                        try:
-                            stock = yf.Ticker(ticker)
-                            data = stock.history(period='1d')
+                            try:
+                                price_value = Decimal(quoted_price_value)
+                            except (InvalidOperation, TypeError):
+                                price_value = None
 
-                            if not data.empty:
-                                latest_price = round(float(data['Close'].iloc[-1]), 2)
-                                price_value = Decimal(str(latest_price))
+                            if price_value is None:
+                                error_message = 'Could not confirm that trade price. Please review the trade again.'
                             else:
-                                error_message = 'Could not fetch a current price for that ticker.'
-                        except Exception:
-                            error_message = 'Could not fetch a current price right now.'
-
-                        if price_value is not None:
-                            # Work out the current cash balance before saving a new trade.
-                            cash_balance = starting_cash
-                            all_trades = Trade.objects.filter(user=request.user)
-
-                            for trade in all_trades:
-                                trade_total = trade.quantity * trade.price
-
-                                if trade.trade_type == 'BUY':
-                                    cash_balance -= trade_total
-                                elif trade.trade_type == 'SELL':
-                                    cash_balance += trade_total
-
-                            # Count current shares for this ticker before saving a sell.
-                            current_shares = 0
-                            existing_trades = Trade.objects.filter(
-                                user=request.user,
-                                ticker=ticker,
-                            )
-
-                            for trade in existing_trades:
-                                if trade.trade_type == 'BUY':
-                                    current_shares += trade.quantity
-                                elif trade.trade_type == 'SELL':
-                                    current_shares -= trade.quantity
-
-                            # Block sells that are larger than the shares owned.
-                            if trade_type == 'SELL' and quantity_value > current_shares:
-                                error_message = 'You cannot sell more shares than you currently own.'
-                            # Block buys that cost more cash than is available.
-                            elif trade_type == 'BUY' and (quantity_value * price_value) > cash_balance:
-                                error_message = 'You do not have enough cash to make that purchase.'
-                            else:
-                                # Save one row in the Trade table using the fetched price.
-                                Trade.objects.create(
-                                    user=request.user,
-                                    ticker=ticker,
-                                    trade_type=trade_type,
-                                    quantity=quantity_value,
-                                    price=price_value,
+                                cash_balance, current_shares = get_trade_balances(
+                                    request.user,
+                                    ticker,
+                                    starting_cash,
                                 )
-                                success_message = f'Trade saved successfully at ${price_value} per share.'
 
-                                # Clear the form after a successful save.
-                                ticker = ''
-                                trade_type = 'BUY'
-                                quantity = ''
+                                # Block sells that are larger than the shares owned.
+                                if trade_type == Trade.SELL and quantity_value > current_shares:
+                                    error_message = 'You cannot sell more shares than you currently own.'
+                                # Block buys that cost more cash than is available.
+                                elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
+                                    error_message = 'You do not have enough cash to make that purchase.'
+                                else:
+                                    # Save one row in the Trade table using the confirmed price.
+                                    Trade.objects.create(
+                                        user=request.user,
+                                        ticker=ticker,
+                                        trade_type=trade_type,
+                                        quantity=quantity_value,
+                                        price=price_value,
+                                    )
+                                    trade_total = quantity_value * price_value
+                                    success_message = (
+                                        f'{trade_type} trade confirmed for {quantity_value} shares of '
+                                        f'{ticker} at ${price_value:.2f} per share. '
+                                        f'Estimated total: ${trade_total:.2f}.'
+                                    )
+
+                                    # Clear the form after a successful save.
+                                    ticker = ''
+                                    trade_type = 'BUY'
+                                    quantity = ''
+                        else:
+                            # Automatically fetch the current market price for review.
+                            try:
+                                price_value = fetch_latest_price(ticker)
+                            except Exception:
+                                price_value = None
+                                error_message = 'Could not fetch a current price right now.'
+
+                            if price_value is None and error_message is None:
+                                error_message = 'Could not fetch a current price for that ticker.'
+                            elif price_value is not None:
+                                cash_balance, current_shares = get_trade_balances(
+                                    request.user,
+                                    ticker,
+                                    starting_cash,
+                                )
+
+                                # Block sells that are larger than the shares owned.
+                                if trade_type == Trade.SELL and quantity_value > current_shares:
+                                    error_message = 'You cannot sell more shares than you currently own.'
+                                # Block buys that cost more cash than is available.
+                                elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
+                                    error_message = 'You do not have enough cash to make that purchase.'
+                                else:
+                                    quoted_price = price_value
+                                    estimated_total = quantity_value * quoted_price
+                                    confirm_trade = True
                     else:
                         error_message = 'Quantity must be greater than zero.'
                 except ValueError:
@@ -191,6 +239,9 @@ def create_trade(request):
         'quantity': quantity,
         'success_message': success_message,
         'error_message': error_message,
+        'confirm_trade': confirm_trade,
+        'quoted_price': quoted_price,
+        'estimated_total': estimated_total,
     })
 
 

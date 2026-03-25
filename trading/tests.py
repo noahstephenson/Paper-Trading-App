@@ -27,10 +27,19 @@ class TradingViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Paper Trading App')
+        self.assertContains(response, 'Create an Account')
+        self.assertContains(response, 'Log In to Start Trading')
+
+    def test_home_page_shows_summary_for_logged_in_user(self):
+        """The home page should show trading summary values after login."""
+        self.client.force_login(self.user)
+
+        response = self.client.get('/')
+
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Starting Cash: $10000.00')
         self.assertContains(response, 'Saved Trades: 0')
         self.assertContains(response, 'Active Holdings: 0')
-        self.assertContains(response, 'Log In to Start Trading')
 
     def test_protected_pages_require_login(self):
         """Protected trading pages should redirect anonymous users to login."""
@@ -99,7 +108,40 @@ class TradingViewsTests(TestCase):
 
     @patch('trading.views.yf.Ticker')
     def test_buy_trade_saves(self, mock_ticker):
-        """A valid buy trade should be saved to the database."""
+        """A submitted trade should save successfully after confirmation."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [250.00],
+        })
+
+        review_response = self.client.post('/trade/new/', {
+            'ticker': 'MSFT',
+            'trade_type': 'BUY',
+            'quantity': '2',
+        })
+        response = self.client.post('/trade/new/', {
+            'ticker': 'MSFT',
+            'trade_type': 'BUY',
+            'quantity': '2',
+            'quoted_price': '250.00',
+            'form_action': 'confirm',
+        })
+
+        self.assertEqual(review_response.status_code, 200)
+        self.assertContains(review_response, 'Confirm Trade')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Trade.objects.count(), 1)
+        trade = Trade.objects.first()
+        self.assertEqual(trade.user, self.user)
+        self.assertEqual(trade.ticker, 'MSFT')
+        self.assertEqual(trade.trade_type, 'BUY')
+        self.assertEqual(trade.quantity, 2)
+        self.assertEqual(trade.price, Decimal('250.00'))
+        self.assertContains(response, 'BUY trade confirmed for 2 shares of MSFT')
+
+    @patch('trading.views.yf.Ticker')
+    def test_trade_page_reviews_price_before_confirmation(self, mock_ticker):
+        """Submitting the form should show a confirmation step before saving."""
         self.client.force_login(self.user)
         mock_ticker.return_value.history.return_value = pd.DataFrame({
             'Close': [250.00],
@@ -112,13 +154,11 @@ class TradingViewsTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Trade.objects.count(), 1)
-        trade = Trade.objects.first()
-        self.assertEqual(trade.user, self.user)
-        self.assertEqual(trade.ticker, 'MSFT')
-        self.assertEqual(trade.trade_type, 'BUY')
-        self.assertEqual(trade.quantity, 2)
-        self.assertEqual(trade.price, Decimal('250.00'))
+        self.assertContains(response, 'Confirm Trade')
+        self.assertContains(response, 'Review this price before the trade is saved.')
+        self.assertContains(response, 'Current price: $250.00')
+        self.assertContains(response, 'Estimated total: $500.00')
+        self.assertEqual(Trade.objects.count(), 0)
 
     @patch('trading.views.yf.Ticker')
     def test_invalid_trade_type_is_blocked(self, mock_ticker):

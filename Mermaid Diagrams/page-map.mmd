@@ -2,20 +2,25 @@ flowchart TD
     Home([Home page])
     Register([Register page])
     Login([Login page])
-    Search([Search Stock page])
+    Search([Search page])
+    Trade([New trade page])
+    History([Trade history page])
     Portfolio([Portfolio page])
-    Result([Trade result / error page])
+    Admin([Admin page])
 
     Home --> Register
     Home --> Login
+    Home --> Admin
 
+    Register --> Login
+    Login --> Home
     Login --> Search
+    Login --> Trade
+    Login --> History
     Login --> Portfolio
-
-    Search --> Result
-    Search --> Portfolio
-
-    Result --> Search
-    Result --> Portfolio
-
+    Search --> Trade
+    Trade --> History
+    Trade --> Portfolio
+    History --> Portfolio
     Portfolio --> Search
+    Login --> Admin

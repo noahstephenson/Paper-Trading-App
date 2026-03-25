@@ -7,7 +7,7 @@
 <body>
     <h1>Enter a Paper Trade</h1>
     <p>Use this form to save a buy or sell trade in the database.</p>
-    <p>The app will fetch the current market price automatically when you submit the trade.</p>
+    <p>When you submit the trade, the app will fetch the current market price and ask you to confirm it before saving.</p>
 
     <!-- Keep the main navigation the same on every page. -->
     <p>
@@ -41,8 +41,27 @@
         <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
         <br><br>
 
-        <button type="submit">Save Trade</button>
+        <button type="submit">Submit Trade</button>
     </form>
+
+    {% if confirm_trade %}
+        <h2>Confirm Trade</h2>
+        <p>Review this price before the trade is saved.</p>
+        <p>Ticker: {{ ticker }}</p>
+        <p>Trade Type: {{ trade_type }}</p>
+        <p>Quantity: {{ quantity }}</p>
+        <p>Current price: ${{ quoted_price|floatformat:2 }}</p>
+        <p>Estimated total: ${{ estimated_total|floatformat:2 }}</p>
+
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="ticker" value="{{ ticker }}">
+            <input type="hidden" name="trade_type" value="{{ trade_type }}">
+            <input type="hidden" name="quantity" value="{{ quantity }}">
+            <input type="hidden" name="quoted_price" value="{{ quoted_price }}">
+            <button type="submit" name="form_action" value="confirm">Confirm Trade</button>
+        </form>
+    {% endif %}
 
     {% if success_message %}
         <p>{{ success_message }}</p>

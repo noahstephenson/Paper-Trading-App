@@ -1,21 +1,28 @@
 flowchart LR
     User([User])
+    Admin([Admin User])
 
     subgraph App["Django Paper Trading MVP"]
         direction TB
-        Register([Register account])
+        Register([Create account])
         Login([Log in])
+        Logout([Log out])
         Search([Search ticker])
-        ViewData([View stock page])
-        Buy([Buy stock])
-        Sell([Sell stock])
-        Portfolio([View portfolio page])
+        ViewPrice([View current price])
+        ReviewTrade([Review trade quote])
+        ConfirmTrade([Confirm trade])
+        Portfolio([View portfolio])
+        History([View trade history])
+        AdminPage([Inspect trades in Django admin])
     end
 
     User --> Register
     User --> Login
+    User --> Logout
     User --> Search
-    User --> ViewData
-    User --> Buy
-    User --> Sell
+    User --> ViewPrice
+    User --> ReviewTrade
+    User --> ConfirmTrade
     User --> Portfolio
+    User --> History
+    Admin --> AdminPage

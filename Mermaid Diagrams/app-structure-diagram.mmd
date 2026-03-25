@@ -1,11 +1,13 @@
 flowchart LR
-    User([User]) --> Views[Django Views]
+    User([User]) --> Home[Home Page]
+    User --> Auth[Login / Register]
+    User --> TradingViews[Django Trading Views]
+    Admin([Admin User]) --> AdminSite[Django Admin]
 
-    Views --> TradeService[TradeService]
-    Views --> MarketDataService[MarketDataService]
-    Views --> Data[(Django Models: Portfolio / Position / Trade)]
+    TradingViews --> Templates[Simple HTML Templates]
+    TradingViews --> TradeModel[(Trade Model)]
+    TradingViews --> MarketData[yfinance]
+    TradingViews --> AuthSystem[Django Auth]
 
-    TradeService --> MarketDataService
-    TradeService --> Data
-
-    MarketDataService --> YFinance[yfinance]
+    TradeModel --> SQLite[(SQLite Database)]
+    AdminSite --> TradeModel
