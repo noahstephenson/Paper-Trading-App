@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Enter Trade</title>
+</head>
+<body>
+    <h1>Enter a Paper Trade</h1>
+    <p>Use this form to save a buy or sell trade in the database.</p>
+
+    <form method="post">
+        <!-- Django requires a CSRF token for POST forms. -->
+        {% csrf_token %}
+
+        <label for="ticker">Ticker Symbol:</label>
+        <input type="text" id="ticker" name="ticker" value="{{ ticker }}">
+        <br><br>
+
+        <label for="trade_type">Trade Type:</label>
+        <select id="trade_type" name="trade_type">
+            <option value="BUY" {% if trade_type == 'BUY' %}selected{% endif %}>Buy</option>
+            <option value="SELL" {% if trade_type == 'SELL' %}selected{% endif %}>Sell</option>
+        </select>
+        <br><br>
+
+        <label for="quantity">Quantity:</label>
+        <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
+        <br><br>
+
+        <label for="price">Price Per Share:</label>
+        <input type="text" id="price" name="price" value="{{ price }}">
+        <br><br>
+
+        <button type="submit">Save Trade</button>
+    </form>
+
+    {% if success_message %}
+        <p>{{ success_message }}</p>
+    {% endif %}
+
+    {% if error_message %}
+        <p>{{ error_message }}</p>
+    {% endif %}
+
+    <a href="/">Back to Home</a>
+</body>
+</html>
