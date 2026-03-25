@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Portfolio</title>
 </head>
 <body>
@@ -9,7 +11,7 @@
     <p>This page shows the current shares owned for each ticker.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p>
+    <p class="site-nav">
         <a href="/">Home</a> |
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
@@ -22,16 +24,30 @@
     </p>
 
     {% if trades_cleared %}
-        <p>All trades were cleared successfully.</p>
+        <p class="message message-success">All trades were cleared successfully.</p>
     {% endif %}
 
-    <p>Starting Cash: ${{ starting_cash|floatformat:2 }}</p>
-    <p>Cash Balance: ${{ cash_balance|floatformat:2 }}</p>
-    <p>Total Holdings Value: ${{ total_holdings_value|floatformat:2 }}</p>
-    <p>Total Account Value: ${{ total_account_value|floatformat:2 }}</p>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <strong>Starting Cash</strong>
+            <div>${{ starting_cash|floatformat:2 }}</div>
+        </div>
+        <div class="summary-card">
+            <strong>Cash Balance</strong>
+            <div>${{ cash_balance|floatformat:2 }}</div>
+        </div>
+        <div class="summary-card">
+            <strong>Total Holdings Value</strong>
+            <div>${{ total_holdings_value|floatformat:2 }}</div>
+        </div>
+        <div class="summary-card">
+            <strong>Total Account Value</strong>
+            <div>${{ total_account_value|floatformat:2 }}</div>
+        </div>
+    </div>
 
     {% if portfolio_rows %}
-        <table border="1">
+        <table>
             <tr>
                 <th>Ticker</th>
                 <th>Shares Owned</th>
@@ -86,7 +102,10 @@
             {% endfor %}
         </table>
     {% else %}
-        <p>No holdings to show yet.</p>
+        <div class="empty-state">
+            <p>No holdings to show yet.</p>
+            <p><a class="button-link" href="/search/">Search for a stock</a></p>
+        </div>
     {% endif %}
 
 </body>

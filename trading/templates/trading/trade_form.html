@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Enter Trade</title>
 </head>
 <body>
@@ -10,7 +12,7 @@
     <p>When you submit the trade, the app will fetch the current market price and ask you to confirm it before saving.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p>
+    <p class="site-nav">
         <a href="/">Home</a> |
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
@@ -44,9 +46,14 @@
         <button type="submit">Submit Trade</button>
     </form>
 
+    {% if ticker and not confirm_trade %}
+        <p class="message message-success">The ticker field was prefilled from your search. You can keep it or change it.</p>
+    {% endif %}
+
     {% if confirm_trade %}
-        <h2>Confirm Trade</h2>
-        <p>Review this price before the trade is saved.</p>
+        <div class="confirm-box">
+        <h2>Review Trade Details</h2>
+        <p>Check the price below, then save the trade if it looks right.</p>
         <p>Ticker: {{ ticker }}</p>
         <p>Trade Type: {{ trade_type }}</p>
         <p>Quantity: {{ quantity }}</p>
@@ -55,20 +62,17 @@
 
         <form method="post">
             {% csrf_token %}
-            <input type="hidden" name="ticker" value="{{ ticker }}">
-            <input type="hidden" name="trade_type" value="{{ trade_type }}">
-            <input type="hidden" name="quantity" value="{{ quantity }}">
-            <input type="hidden" name="quoted_price" value="{{ quoted_price }}">
-            <button type="submit" name="form_action" value="confirm">Confirm Trade</button>
+            <button type="submit" name="form_action" value="confirm">Save Trade</button>
         </form>
+        </div>
     {% endif %}
 
     {% if success_message %}
-        <p>{{ success_message }}</p>
+        <p class="message message-success">{{ success_message }}</p>
     {% endif %}
 
     {% if error_message %}
-        <p>{{ error_message }}</p>
+        <p class="message message-error">{{ error_message }}</p>
     {% endif %}
 </body>
 </html>

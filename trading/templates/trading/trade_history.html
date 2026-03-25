@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Trade History</title>
 </head>
 <body>
@@ -9,7 +11,7 @@
     <p>This page shows the trades saved in the database.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p>
+    <p class="site-nav">
         <a href="/">Home</a> |
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
@@ -22,7 +24,7 @@
     </p>
 
     {% if trades %}
-        <table border="1">
+        <table>
             <tr>
                 <th>Ticker</th>
                 <th>Type</th>
@@ -41,7 +43,10 @@
             {% endfor %}
         </table>
     {% else %}
-        <p>No trades have been saved yet.</p>
+        <div class="empty-state">
+            <p>No trades have been saved yet.</p>
+            <p><a class="button-link" href="/trade/new/">Go to New Trade</a></p>
+        </div>
     {% endif %}
 
 </body>

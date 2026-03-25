@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Search Ticker</title>
 </head>
 <body>
@@ -9,7 +11,7 @@
     <p>This page will let users search for a ticker symbol.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p>
+    <p class="site-nav">
         <a href="/">Home</a> |
         <a href="/search/">Search</a> |
         <a href="/trade/new/">New Trade</a> |
@@ -27,16 +29,63 @@
         <button type="submit">Search</button>
     </form>
 
+    {% if not ticker and not error_message %}
+        <div class="empty-state">
+            <p>Try searching for a stock like <strong>AAPL</strong>, <strong>MSFT</strong>, or <strong>TSLA</strong>.</p>
+        </div>
+    {% endif %}
+
     {% if ticker %}
-        <p>You searched for: {{ ticker }}</p>
+        <h2>
+            {{ ticker }}
+            {% if company_name %}
+                - {{ company_name }}
+            {% endif %}
+        </h2>
     {% endif %}
 
     {% if price %}
-        <p>Current price: ${{ price }}</p>
+        <div class="confirm-box">
+            <p><strong>Current price:</strong> ${{ price|floatformat:2 }}</p>
+            <p>This is a simple recent/current price from yfinance.</p>
+            <p class="inline-actions">
+                <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Trade {{ ticker }}</a>
+            </p>
+        </div>
+    {% endif %}
+
+    {% if stock_details %}
+        <table>
+            <tr>
+                <th>Previous Close</th>
+                <th>Day High</th>
+                <th>Day Low</th>
+                <th>Daily Change</th>
+            </tr>
+            <tr>
+                <td>
+                    {% if stock_details.previous_close %}
+                        ${{ stock_details.previous_close|floatformat:2 }}
+                    {% else %}
+                        Not available
+                    {% endif %}
+                </td>
+                <td>${{ stock_details.day_high|floatformat:2 }}</td>
+                <td>${{ stock_details.day_low|floatformat:2 }}</td>
+                <td>
+                    {% if stock_details.daily_change or stock_details.daily_change == 0 %}
+                        ${{ stock_details.daily_change|floatformat:2 }}
+                        ({{ stock_details.daily_change_percent|floatformat:2 }}%)
+                    {% else %}
+                        Not available
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
     {% endif %}
 
     {% if error_message %}
-        <p>{{ error_message }}</p>
+        <p class="message message-error">{{ error_message }}</p>
     {% endif %}
 </body>
 </html>

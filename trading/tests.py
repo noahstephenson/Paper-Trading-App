@@ -96,15 +96,37 @@ class TradingViewsTests(TestCase):
     def test_search_page_shows_price(self, mock_ticker):
         """Searching for a ticker should show the fetched price."""
         self.client.force_login(self.user)
+        mock_ticker.return_value.info = {
+            'shortName': 'Apple Inc.',
+        }
         mock_ticker.return_value.history.return_value = pd.DataFrame({
-            'Close': [123.45],
+            'Close': [120.00, 123.45],
+            'High': [121.00, 125.00],
+            'Low': [119.50, 122.00],
         })
 
         response = self.client.get('/search/', {'ticker': 'aapl'})
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'You searched for: AAPL')
+        self.assertContains(response, 'Apple Inc.')
         self.assertContains(response, '123.45')
+        self.assertContains(response, 'Previous Close')
+        self.assertContains(response, '$120.00')
+        self.assertContains(response, '$125.00')
+        self.assertContains(response, '$122.00')
+        self.assertContains(response, '$3.45')
+        self.assertContains(response, '2.88%')
+        self.assertContains(response, 'Trade AAPL')
+
+    def test_trade_page_prefills_ticker_from_search_query(self):
+        """The trade form should prefill a ticker passed from the search page."""
+        self.client.force_login(self.user)
+
+        response = self.client.get('/trade/new/?ticker=aapl')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="AAPL"', html=False)
+        self.assertContains(response, 'prefilled from your search')
 
     @patch('trading.views.yf.Ticker')
     def test_buy_trade_saves(self, mock_ticker):
@@ -120,16 +142,13 @@ class TradingViewsTests(TestCase):
             'quantity': '2',
         })
         response = self.client.post('/trade/new/', {
-            'ticker': 'MSFT',
-            'trade_type': 'BUY',
-            'quantity': '2',
-            'quoted_price': '250.00',
             'form_action': 'confirm',
-        })
+        }, follow=True)
 
         self.assertEqual(review_response.status_code, 200)
-        self.assertContains(review_response, 'Confirm Trade')
+        self.assertContains(review_response, 'Review Trade Details')
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain, [('/trade/new/', 302)])
         self.assertEqual(Trade.objects.count(), 1)
         trade = Trade.objects.first()
         self.assertEqual(trade.user, self.user)
@@ -154,11 +173,42 @@ class TradingViewsTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Confirm Trade')
-        self.assertContains(response, 'Review this price before the trade is saved.')
+        self.assertContains(response, 'Review Trade Details')
+        self.assertContains(response, 'Check the price below, then save the trade if it looks right.')
         self.assertContains(response, 'Current price: $250.00')
         self.assertContains(response, 'Estimated total: $500.00')
+        self.assertContains(response, 'Save Trade')
         self.assertEqual(Trade.objects.count(), 0)
+
+    @patch('trading.views.yf.Ticker')
+    def test_confirm_trade_uses_reviewed_server_price(self, mock_ticker):
+        """Confirmation should use the reviewed price stored on the server."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [250.00],
+        })
+
+        self.client.post('/trade/new/', {
+            'ticker': 'MSFT',
+            'trade_type': 'BUY',
+            'quantity': '2',
+        })
+        response = self.client.post('/trade/new/', {
+            'ticker': 'HACK',
+            'trade_type': 'SELL',
+            'quantity': '999',
+            'quoted_price': '1.00',
+            'form_action': 'confirm',
+        }, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Trade.objects.count(), 1)
+        trade = Trade.objects.first()
+        self.assertEqual(trade.ticker, 'MSFT')
+        self.assertEqual(trade.trade_type, 'BUY')
+        self.assertEqual(trade.quantity, 2)
+        self.assertEqual(trade.price, Decimal('250.00'))
+        self.assertContains(response, 'BUY trade confirmed for 2 shares of MSFT')
 
     @patch('trading.views.yf.Ticker')
     def test_invalid_trade_type_is_blocked(self, mock_ticker):
