@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Portfolio</title>
+</head>
+<body>
+    <h1>Portfolio</h1>
+    <p>This page shows the current shares owned for each ticker.</p>
+
+    {% if portfolio_rows %}
+        <table border="1">
+            <tr>
+                <th>Ticker</th>
+                <th>Shares Owned</th>
+            </tr>
+            {% for row in portfolio_rows %}
+                <tr>
+                    <td>{{ row.ticker }}</td>
+                    <td>{{ row.shares }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No holdings to show yet.</p>
+    {% endif %}
+
+    <br>
+    <a href="/">Back to Home</a>
+</body>
+</html>
