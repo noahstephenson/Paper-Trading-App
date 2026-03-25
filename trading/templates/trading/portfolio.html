@@ -8,6 +8,15 @@
     <h1>Portfolio</h1>
     <p>This page shows the current shares owned for each ticker.</p>
 
+    {% if trades_cleared %}
+        <p>All trades were cleared successfully.</p>
+    {% endif %}
+
+    <p>Starting Cash: ${{ starting_cash|floatformat:2 }}</p>
+    <p>Cash Balance: ${{ cash_balance|floatformat:2 }}</p>
+    <p>Total Holdings Value: ${{ total_holdings_value|floatformat:2 }}</p>
+    <p>Total Account Value: ${{ total_account_value|floatformat:2 }}</p>
+
     {% if portfolio_rows %}
         <table border="1">
             <tr>
@@ -22,14 +31,14 @@
                     <td>{{ row.shares }}</td>
                     <td>
                         {% if row.current_price %}
-                            ${{ row.current_price }}
+                            ${{ row.current_price|floatformat:2 }}
                         {% else %}
                             Price unavailable
                         {% endif %}
                     </td>
                     <td>
                         {% if row.total_value %}
-                            ${{ row.total_value }}
+                            ${{ row.total_value|floatformat:2 }}
                         {% else %}
                             Value unavailable
                         {% endif %}

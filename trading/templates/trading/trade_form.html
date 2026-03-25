@@ -7,6 +7,7 @@
 <body>
     <h1>Enter a Paper Trade</h1>
     <p>Use this form to save a buy or sell trade in the database.</p>
+    <p>The app will fetch the current market price automatically when you submit the trade.</p>
 
     <form method="post">
         <!-- Django requires a CSRF token for POST forms. -->
@@ -25,10 +26,6 @@
 
         <label for="quantity">Quantity:</label>
         <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
-        <br><br>
-
-        <label for="price">Price Per Share:</label>
-        <input type="text" id="price" name="price" value="{{ price }}">
         <br><br>
 
         <button type="submit">Save Trade</button>
