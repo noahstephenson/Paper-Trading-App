@@ -63,20 +63,34 @@ def create_trade(request):
                 price_value = Decimal(price)
 
                 if quantity_value > 0 and price_value > 0:
-                    # Save one row in the Trade table.
-                    Trade.objects.create(
-                        ticker=ticker,
-                        trade_type=trade_type,
-                        quantity=quantity_value,
-                        price=price_value,
-                    )
-                    success_message = 'Trade saved successfully.'
+                    # Count current shares for this ticker before saving a sell.
+                    current_shares = 0
+                    existing_trades = Trade.objects.filter(ticker=ticker)
 
-                    # Clear the form after a successful save.
-                    ticker = ''
-                    trade_type = 'BUY'
-                    quantity = ''
-                    price = ''
+                    for trade in existing_trades:
+                        if trade.trade_type == 'BUY':
+                            current_shares += trade.quantity
+                        elif trade.trade_type == 'SELL':
+                            current_shares -= trade.quantity
+
+                    # Block sells that are larger than the shares owned.
+                    if trade_type == 'SELL' and quantity_value > current_shares:
+                        error_message = 'You cannot sell more shares than you currently own.'
+                    else:
+                        # Save one row in the Trade table.
+                        Trade.objects.create(
+                            ticker=ticker,
+                            trade_type=trade_type,
+                            quantity=quantity_value,
+                            price=price_value,
+                        )
+                        success_message = 'Trade saved successfully.'
+
+                        # Clear the form after a successful save.
+                        ticker = ''
+                        trade_type = 'BUY'
+                        quantity = ''
+                        price = ''
                 else:
                     error_message = 'Quantity and price must be greater than zero.'
             except (ValueError, InvalidOperation):
