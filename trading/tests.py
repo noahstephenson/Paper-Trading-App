@@ -1,4 +1,5 @@
 from decimal import Decimal
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 import pandas as pd
@@ -14,6 +15,9 @@ class TradingViewsTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Paper Trading App')
+        self.assertContains(response, 'Starting Cash: $10000.00')
+        self.assertContains(response, 'Saved Trades: 0')
+        self.assertContains(response, 'Active Holdings: 0')
 
     @patch('trading.views.yf.Ticker')
     def test_search_page_shows_price(self, mock_ticker):
@@ -137,3 +141,42 @@ class TradingViewsTests(TestCase):
         self.assertContains(response, '$120.00')
         self.assertContains(response, '$150.00')
         self.assertContains(response, '$450.00')
+
+    def test_trade_history_shows_formatted_date(self):
+        """The trade history page should show a readable trade date."""
+        trade = Trade.objects.create(
+            ticker='AAPL',
+            trade_type='BUY',
+            quantity=2,
+            price=Decimal('100.00'),
+        )
+        Trade.objects.filter(pk=trade.pk).update(
+            created_at=datetime(2026, 3, 25, 14, 30, tzinfo=timezone.utc)
+        )
+
+        response = self.client.get('/trades/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '$100.00')
+        self.assertContains(response, 'Mar 25, 2026 2:30 p.m.')
+
+    @patch('trading.views.yf.Ticker')
+    def test_portfolio_shows_gain_metrics(self, mock_ticker):
+        """The portfolio page should show total, per-share, and percent gain."""
+        Trade.objects.create(
+            ticker='AAPL',
+            trade_type='BUY',
+            quantity=2,
+            price=Decimal('100.00'),
+        )
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [125.00],
+        })
+
+        response = self.client.get('/portfolio/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '$250.00')
+        self.assertContains(response, '$50.00')
+        self.assertContains(response, '$25.00')
+        self.assertContains(response, '25.00%')

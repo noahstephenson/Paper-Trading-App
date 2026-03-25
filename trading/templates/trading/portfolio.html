@@ -34,6 +34,9 @@
                 <th>Average Cost</th>
                 <th>Current Price</th>
                 <th>Total Value</th>
+                <th>Total Gain/Loss</th>
+                <th>Gain/Loss Per Share</th>
+                <th>Gain/Loss %</th>
             </tr>
             {% for row in portfolio_rows %}
                 <tr>
@@ -52,6 +55,27 @@
                             ${{ row.total_value|floatformat:2 }}
                         {% else %}
                             Value unavailable
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.gain_loss or row.gain_loss == 0 %}
+                            ${{ row.gain_loss|floatformat:2 }}
+                        {% else %}
+                            Gain/loss unavailable
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.gain_loss_per_share or row.gain_loss_per_share == 0 %}
+                            ${{ row.gain_loss_per_share|floatformat:2 }}
+                        {% else %}
+                            Gain/loss unavailable
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.gain_loss_percent or row.gain_loss_percent == 0 %}
+                            {{ row.gain_loss_percent|floatformat:2 }}%
+                        {% else %}
+                            Gain/loss unavailable
                         {% endif %}
                     </td>
                 </tr>

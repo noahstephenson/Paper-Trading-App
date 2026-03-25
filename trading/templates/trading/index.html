@@ -6,7 +6,7 @@
 </head>
 <body>
     <h1>Paper Trading App</h1>
-    <p>This is the home page.</p>
+    <p>Practice simple stock trades with virtual money.</p>
 
     <!-- Keep the main navigation the same on every page. -->
     <p>
@@ -16,7 +16,17 @@
         <a href="/trades/">Trade History</a> |
         <a href="/portfolio/">Portfolio</a>
     </p>
-    <br><br>
+
+    <h2>Quick Summary</h2>
+    <p>Starting Cash: ${{ starting_cash|floatformat:2 }}</p>
+    <p>Saved Trades: {{ trade_count }}</p>
+    <p>Active Holdings: {{ active_holdings_count }}</p>
+
+    <h2>How to Use This App</h2>
+    <p>1. Search for a ticker to view a recent stock price.</p>
+    <p>2. Save a BUY or SELL trade on the New Trade page.</p>
+    <p>3. Review your trades and portfolio summary.</p>
+    <br>
 
     <form method="post" action="/demo/clear/">
         <!-- This button removes every saved trade. -->

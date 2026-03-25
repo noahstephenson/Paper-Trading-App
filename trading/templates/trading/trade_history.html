@@ -31,8 +31,8 @@
                     <td>{{ trade.ticker }}</td>
                     <td>{{ trade.trade_type }}</td>
                     <td>{{ trade.quantity }}</td>
-                    <td>${{ trade.price }}</td>
-                    <td>{{ trade.created_at }}</td>
+                    <td>${{ trade.price|floatformat:2 }}</td>
+                    <td>{{ trade.created_at|date:"M j, Y g:i a" }}</td>
                 </tr>
             {% endfor %}
         </table>

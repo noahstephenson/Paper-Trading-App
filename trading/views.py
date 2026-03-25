@@ -10,7 +10,27 @@ from .models import Trade
 
 def index(request):
     """Home page for the paper trading app."""
-    return render(request, 'trading/index.html')
+    starting_cash = Decimal('10000.00')
+    trades = Trade.objects.all()
+    trade_count = trades.count()
+    holdings = {}
+
+    for trade in trades:
+        if trade.ticker not in holdings:
+            holdings[trade.ticker] = 0
+
+        if trade.trade_type == 'BUY':
+            holdings[trade.ticker] += trade.quantity
+        elif trade.trade_type == 'SELL':
+            holdings[trade.ticker] -= trade.quantity
+
+    active_holdings_count = sum(1 for shares in holdings.values() if shares > 0)
+
+    return render(request, 'trading/index.html', {
+        'starting_cash': starting_cash,
+        'trade_count': trade_count,
+        'active_holdings_count': active_holdings_count,
+    })
 
 def search(request):
     """Handle ticker search and fetch stock data."""
@@ -197,6 +217,9 @@ def portfolio(request):
             current_price = None
             total_value = None
             average_cost = holding_data['total_cost'] / Decimal(shares)
+            gain_loss = None
+            gain_loss_per_share = None
+            gain_loss_percent = None
 
             try:
                 # Load the latest closing price for this ticker.
@@ -207,11 +230,20 @@ def portfolio(request):
                     latest_price = round(float(data['Close'].iloc[-1]), 2)
                     current_price = Decimal(str(latest_price))
                     total_value = shares * current_price
+                    gain_loss = total_value - holding_data['total_cost']
+                    gain_loss_per_share = current_price - average_cost
+                    if holding_data['total_cost'] > 0:
+                        gain_loss_percent = (
+                            gain_loss / holding_data['total_cost']
+                        ) * Decimal('100')
                     total_holdings_value += total_value
             except Exception:
                 # Keep the page working even if price data is unavailable.
                 current_price = None
                 total_value = None
+                gain_loss = None
+                gain_loss_per_share = None
+                gain_loss_percent = None
 
             portfolio_rows.append({
                 'ticker': ticker,
@@ -219,6 +251,9 @@ def portfolio(request):
                 'average_cost': average_cost,
                 'current_price': current_price,
                 'total_value': total_value,
+                'gain_loss': gain_loss,
+                'gain_loss_per_share': gain_loss_per_share,
+                'gain_loss_percent': gain_loss_percent,
             })
 
     # Total account value is the cash plus the current holdings value.
