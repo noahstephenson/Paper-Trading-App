@@ -16,8 +16,8 @@ sequenceDiagram
         alt Validation fails
             TradeView-->>User: Show error message
         else Trade is valid
-            TradeView-->>User: Show confirmation step
-            User->>TradeView: Confirm trade
+            TradeView-->>User: Show review step
+            User->>TradeView: Save reviewed trade
             TradeView->>TradeDB: Save trade
             TradeView-->>User: Show success message
         end

@@ -10,13 +10,13 @@ flowchart TD
     Ticker -- No --> Search
     Ticker -- Yes --> Price([View current price])
 
-    Price --> TradePage([Open new trade page])
+    Price --> TradePage([Open new trade page with ticker prefilled])
     TradePage --> Submit([Submit trade details])
     Submit --> Review([App fetches price and shows confirmation])
 
     Review --> Valid{Trade valid?}
     Valid -- No --> TradePage
-    Valid -- Yes --> Confirm([Confirm trade])
+    Valid -- Yes --> Confirm([Save reviewed trade])
 
     Confirm --> Save([Save trade to SQLite])
     Save --> History([View trade history])

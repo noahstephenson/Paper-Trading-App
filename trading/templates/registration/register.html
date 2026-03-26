@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Create Account</title>
 </head>
 <body>
     <h1>Create Account</h1>
     <p>Create a simple account to use your own paper trading data.</p>
 
-    <p>
+    <p class="site-nav">
         <a href="/">Home</a> |
         <a href="{% url 'login' %}">Log In</a>
     </p>

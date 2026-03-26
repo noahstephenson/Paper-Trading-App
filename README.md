@@ -8,8 +8,10 @@ I kept the project intentionally small. The goal was not to build a full trading
 
 - lets a user create an account, log in, and log out
 - looks up stock prices with `yfinance`
+- shows a few extra stock details on the search page, like previous close and day range
 - saves paper `BUY` and `SELL` trades in SQLite
 - uses a two-step trade flow so the user can review the price before confirming the trade
+- lets the user jump from search results straight into the trade page with the ticker prefilled
 - shows a portfolio page based on saved trades
 - shows a trade history page with past transactions
 - lets me inspect saved data in Django admin
@@ -27,8 +29,8 @@ The Mermaid diagrams below are there to make the app flow and page structure eas
 | Home | `/` | Landing page and starting point |
 | Register | `/accounts/register/` | Create a new account |
 | Login | `/accounts/login/` | Log in to the app |
-| Search | `/search/` | Search a ticker and view its current price |
-| New Trade | `/trade/new/` | Enter a trade, review the fetched price, and confirm it |
+| Search | `/search/` | Search a ticker, view price details, and jump into a trade |
+| New Trade | `/trade/new/` | Enter a trade, review the fetched price, and save it |
 | Trade History | `/trades/` | See saved trades for the logged-in user |
 | Portfolio | `/portfolio/` | See current holdings and summary values |
 | Admin | `/admin/` | Check saved data as an admin user |
@@ -127,13 +129,13 @@ flowchart TD
     Ticker -- No --> Search
     Ticker -- Yes --> Price([Show current price])
 
-    Price --> TradePage([Go to new trade page])
+    Price --> TradePage([Open new trade page with ticker prefilled])
     TradePage --> Submit([Submit trade details])
     Submit --> Review([App fetches price and shows confirmation])
 
     Review --> Valid{Trade valid?}
     Valid -- No --> TradePage
-    Valid -- Yes --> Confirm([Confirm trade])
+    Valid -- Yes --> Confirm([Save reviewed trade])
 
     Confirm --> Save([Save trade in SQLite])
     Save --> History([View trade history])
@@ -142,7 +144,7 @@ flowchart TD
 
 ## Trade Confirmation Flow
 
-I added a two-step trade flow so a trade is not saved the moment the user fills out the form. The user submits the trade first, sees the current fetched price, and then confirms it.
+I added a two-step trade flow so a trade is not saved the moment the user fills out the form. The user submits the trade first, sees the current fetched price, and then saves the reviewed trade.
 
 ```mermaid
 sequenceDiagram
@@ -163,8 +165,8 @@ sequenceDiagram
         alt Validation fails
             TradeView-->>User: Show error message
         else Trade is valid
-            TradeView-->>User: Show confirmation step
-            User->>TradeView: Confirm trade
+            TradeView-->>User: Show review step
+            User->>TradeView: Save reviewed trade
             TradeView->>TradeDB: Save trade
             TradeView-->>User: Show success message
         end
@@ -228,9 +230,9 @@ If I were showing this project in class, this is the path I would take:
 1. Open the home page.
 2. Create an account or log in.
 3. Search a ticker like `AAPL`.
-4. Go to the new trade page and enter a `BUY`.
+4. Click into the trade page and enter a `BUY`.
 5. Review the fetched price.
-6. Confirm the trade.
+6. Save the trade.
 7. Open trade history to show the saved row.
 8. Open portfolio to show the updated holdings.
 9. Open Django admin to show the data in the database.

@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
     <title>Paper Trading App</title>
 </head>
 <body>
@@ -9,7 +11,7 @@
     <p>Practice simple stock trades with virtual money.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p>
+    <p class="site-nav">
         {% if user.is_authenticated %}
             <a href="/">Home</a> |
             <a href="/search/">Search</a> |
