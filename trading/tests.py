@@ -57,6 +57,16 @@ class TradingViewsTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="next" value="/search/"', html=False)
 
+    def test_login_redirects_to_home_when_no_next(self):
+        """Logging in without a next param should redirect to the home page."""
+        response = self.client.post('/accounts/login/', {
+            'username': 'trader1',
+            'password': 'testpass123',
+        }, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.redirect_chain, [('/', 302)])
+
     def test_accounts_root_redirects_to_login(self):
         """The accounts root URL should redirect to the login page."""
         response = self.client.get('/accounts/')

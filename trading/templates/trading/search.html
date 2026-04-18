@@ -21,6 +21,7 @@
             {% csrf_token %}
             <button type="submit">Log Out</button>
         </form>
+        | {{ request.user.username }}
     </p>
 
     <form method="get">
@@ -82,6 +83,10 @@
                 </td>
             </tr>
         </table>
+    {% endif %}
+
+    {% if chart_html %}
+        {{ chart_html|safe }}
     {% endif %}
 
     {% if error_message %}

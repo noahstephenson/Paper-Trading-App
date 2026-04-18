@@ -22,6 +22,7 @@
                 {% csrf_token %}
                 <button type="submit">Log Out</button>
             </form>
+            | {{ request.user.username }}
         {% else %}
             <a href="/">Home</a> |
             <a href="{% url 'login' %}">Log In</a> |

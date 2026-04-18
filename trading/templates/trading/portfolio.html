@@ -21,6 +21,7 @@
             {% csrf_token %}
             <button type="submit">Log Out</button>
         </form>
+        | {{ request.user.username }}
     </p>
 
     {% if trades_cleared %}
