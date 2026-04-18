@@ -157,6 +157,25 @@ class TradingViewsTests(TestCase):
         self.assertNotContains(response, 'plotly')
         self.assertContains(response, 'No stock data was found for that ticker.')
 
+    def test_search_whitespace_ticker_shows_error(self):
+        """A whitespace-only ticker should show a prompt, not crash."""
+        self.client.force_login(self.user)
+
+        response = self.client.get('/search/', {'ticker': '   '})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Please enter a ticker symbol.')
+
+    def test_confirm_without_pending_trade_shows_error(self):
+        """Hitting confirm with no pending session trade should show an error."""
+        self.client.force_login(self.user)
+
+        response = self.client.post('/trade/new/', {'form_action': 'confirm'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Please submit the trade again before confirming it.')
+        self.assertEqual(Trade.objects.count(), 0)
+
     def test_trade_page_prefills_ticker_from_search_query(self):
         """The trade form should prefill a ticker passed from the search page."""
         self.client.force_login(self.user)
