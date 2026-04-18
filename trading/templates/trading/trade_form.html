@@ -19,7 +19,7 @@
         <a href="/trades/">Trade History</a>
         <a href="/portfolio/">Portfolio</a>
         <span class="nav-user">
-            {{ request.user.username }}
+            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
             <form method="post" action="{% url 'logout' %}">
                 {% csrf_token %}
                 <button type="submit">Log Out</button>

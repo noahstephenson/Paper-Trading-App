@@ -53,6 +53,13 @@ a:hover {
     display: flex;
     align-items: center;
     gap: 10px;
+    padding-left: 12px;
+    border-left: 1px solid #d8dee4;
+}
+
+.nav-username {
+    font-size: 0.85rem;
+    color: #555;
 }
 
 form {
