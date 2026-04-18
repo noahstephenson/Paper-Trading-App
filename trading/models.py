@@ -27,6 +27,10 @@ class Trade(models.Model):
     # Save when the trade was created.
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def total(self):
+        return self.quantity * self.price
+
     def __str__(self):
         # This gives each trade a readable name in the Django admin.
         return f'{self.trade_type} {self.quantity} shares of {self.ticker}'

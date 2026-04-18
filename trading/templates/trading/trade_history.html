@@ -29,15 +29,19 @@
                 <th>Ticker</th>
                 <th>Type</th>
                 <th>Quantity</th>
-                <th>Price</th>
+                <th>Price Per Share</th>
+                <th>Total</th>
                 <th>Date</th>
             </tr>
             {% for trade in trades %}
                 <tr>
                     <td>{{ trade.ticker }}</td>
-                    <td>{{ trade.trade_type }}</td>
+                    <td class="{% if trade.trade_type == 'BUY' %}trade-buy{% else %}trade-sell{% endif %}">
+                        {{ trade.trade_type }}
+                    </td>
                     <td>{{ trade.quantity }}</td>
                     <td>${{ trade.price|floatformat:2 }}</td>
+                    <td>${{ trade.total|floatformat:2 }}</td>
                     <td>{{ trade.created_at|date:"M j, Y g:i a" }}</td>
                 </tr>
             {% endfor %}

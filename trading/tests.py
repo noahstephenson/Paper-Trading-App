@@ -374,6 +374,22 @@ class TradingViewsTests(TestCase):
         self.assertNotContains(response, 'MSFT')
         self.assertContains(response, 'No holdings to show yet.')
 
+    def test_trade_history_shows_trade_total(self):
+        """The trade history page should show the total cost for each trade."""
+        self.client.force_login(self.user)
+        Trade.objects.create(
+            user=self.user,
+            ticker='AAPL',
+            trade_type='BUY',
+            quantity=4,
+            price=Decimal('150.00'),
+        )
+
+        response = self.client.get('/trades/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '$600.00')
+
     def test_trade_history_shows_formatted_date(self):
         """The trade history page should show a readable trade date."""
         self.client.force_login(self.user)
