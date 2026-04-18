@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
+    <title>Watchlist</title>
+</head>
+<body>
+    <h1>Watchlist</h1>
+    <p>Track tickers you're interested in without making a trade.</p>
+
+    <div class="site-nav">
+        <a href="/">Home</a>
+        <a href="/search/">Search</a>
+        <a href="/trade/new/">New Trade</a>
+        <a href="/trades/">Trade History</a>
+        <a href="/portfolio/">Portfolio</a>
+        <a href="/watchlist/">Watchlist</a>
+        <span class="nav-user">
+            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
+            <form method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit">Log Out</button>
+            </form>
+        </span>
+    </div>
+
+    <form method="post" style="margin: 16px 0;">
+        {% csrf_token %}
+        <div class="form-group" style="display:flex; gap:8px; align-items:center;">
+            <input type="text" name="ticker" placeholder="e.g. AAPL" style="padding:6px 10px; font-size:1rem;">
+            <button type="submit" class="button-link">Add to Watchlist</button>
+        </div>
+    </form>
+
+    {% if watchlist %}
+        <table>
+            <tr>
+                <th>Ticker</th>
+                <th>Current Price</th>
+                <th>Added</th>
+                <th>Actions</th>
+            </tr>
+            {% for item in watchlist %}
+                <tr>
+                    <td><strong>{{ item.ticker }}</strong></td>
+                    <td>
+                        {% if item.price %}
+                            ${{ item.price|floatformat:2 }}
+                        {% else %}
+                            &mdash;
+                        {% endif %}
+                    </td>
+                    <td>{{ item.added_at|date:"M j, Y" }}</td>
+                    <td class="inline-actions">
+                        <a class="button-link" href="/search/?ticker={{ item.ticker }}">Search</a>
+                        <a class="button-link" href="/trade/new/?ticker={{ item.ticker }}">Trade</a>
+                        <form method="post" action="{% url 'trading:remove_from_watchlist' item.ticker %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="button-danger">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <div class="empty-state">
+            <p>Your watchlist is empty.</p>
+            <p>Search for a stock and click <strong>Add to Watchlist</strong>, or type a ticker above.</p>
+        </div>
+    {% endif %}
+
+</body>
+</html>

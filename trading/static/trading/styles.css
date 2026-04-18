@@ -250,3 +250,21 @@ tbody tr:hover {
     padding: 8px;
     overflow: hidden;
 }
+
+.gain-positive {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #1a7f3c;
+}
+
+.gain-negative {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #c0392b;
+}
+
+.chart-box h3 {
+    margin: 4px 0 10px;
+    font-size: 1rem;
+    color: #1f2933;
+}

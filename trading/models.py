@@ -34,3 +34,15 @@ class Trade(models.Model):
     def __str__(self):
         # This gives each trade a readable name in the Django admin.
         return f'{self.trade_type} {self.quantity} shares of {self.ticker}'
+
+
+class WatchlistItem(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    ticker = models.CharField(max_length=10)
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('user', 'ticker')
+
+    def __str__(self):
+        return f"{self.user.username} watching {self.ticker}"

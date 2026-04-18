@@ -18,6 +18,7 @@
         <a href="/trade/new/">New Trade</a>
         <a href="/trades/">Trade History</a>
         <a href="/portfolio/">Portfolio</a>
+        <a href="/watchlist/">Watchlist</a>
         <span class="nav-user">
             <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
             <form method="post" action="{% url 'logout' %}">
@@ -52,7 +53,7 @@
         <button type="submit">Submit Trade</button>
     </form>
 
-    {% if ticker and not confirm_trade %}
+    {% if ticker_prefilled and not confirm_trade %}
         <p class="message message-success">The ticker field was prefilled from your search. You can keep it or change it.</p>
     {% endif %}
 

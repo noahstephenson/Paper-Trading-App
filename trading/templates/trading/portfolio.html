@@ -17,6 +17,7 @@
         <a href="/trade/new/">New Trade</a>
         <a href="/trades/">Trade History</a>
         <a href="/portfolio/">Portfolio</a>
+        <a href="/watchlist/">Watchlist</a>
         <span class="nav-user">
             <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
             <form method="post" action="{% url 'logout' %}">
@@ -57,6 +58,13 @@
             {% endif %}
         </div>
     {% endif %}
+
+    <div class="demo-clear">
+        <form method="post" action="/demo/clear/">
+            {% csrf_token %}
+            <button type="submit" class="button-link">Clear All Trades</button>
+        </form>
+    </div>
 
     {% if portfolio_rows %}
         <table>

@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
 
-from .models import Trade
+from .models import Trade, WatchlistItem
 from .views import fetch_latest_price, get_trade_balances
 
 
@@ -151,13 +151,13 @@ def test_home_page_loads(client):
 
 @pytest.mark.django_db
 def test_home_page_shows_summary_for_logged_in_user(auth_client):
-    """The home page should show trading summary values after login."""
+    """The home page should show the dashboard summary cards after login."""
     response = auth_client.get('/')
 
     assert response.status_code == 200
-    assert 'Starting Cash: $10000.00' in response.content.decode()
-    assert 'Saved Trades: 0' in response.content.decode()
-    assert 'Active Holdings: 0' in response.content.decode()
+    assert 'Dashboard' in response.content.decode()
+    assert 'Total Portfolio Value' in response.content.decode()
+    assert 'Cash Balance' in response.content.decode()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
@@ -610,3 +610,65 @@ def test_clear_trades_removes_saved_data(auth_client, user, other_user):
     assert Trade.objects.filter(user=user).count() == 0
     assert Trade.objects.filter(user=other_user).count() == 1
     assert 'All trades were cleared successfully.' in response.content.decode()
+
+
+# ── Watchlist tests ───────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_watchlist_page_loads(auth_client):
+    """The watchlist page should return 200 for a logged-in user."""
+    response = auth_client.get('/watchlist/')
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_add_ticker_to_watchlist(auth_client, user):
+    """POSTing a ticker to the watchlist page should save it for that user."""
+    auth_client.post('/watchlist/', {'ticker': 'AAPL'})
+    assert WatchlistItem.objects.filter(user=user, ticker='AAPL').exists()
+
+
+@pytest.mark.django_db
+def test_duplicate_ticker_not_added_twice(auth_client, user):
+    """Adding the same ticker twice should result in only one watchlist entry."""
+    auth_client.post('/watchlist/', {'ticker': 'AAPL'})
+    auth_client.post('/watchlist/', {'ticker': 'AAPL'})
+    assert WatchlistItem.objects.filter(user=user, ticker='AAPL').count() == 1
+
+
+@pytest.mark.django_db
+def test_remove_ticker_from_watchlist(auth_client, user):
+    """POSTing to the remove URL should delete that ticker from the watchlist."""
+    WatchlistItem.objects.create(user=user, ticker='TSLA')
+    auth_client.post('/watchlist/remove/TSLA/')
+    assert not WatchlistItem.objects.filter(user=user, ticker='TSLA').exists()
+
+
+@pytest.mark.django_db
+def test_watchlist_unauthenticated_redirects(client):
+    """An unauthenticated request to the watchlist page should redirect to login."""
+    response = client.get('/watchlist/')
+    assert response.status_code == 302
+
+
+@pytest.mark.django_db
+def test_ticker_normalized_to_uppercase(auth_client, user):
+    """Lowercase ticker input should be stored as uppercase."""
+    auth_client.post('/watchlist/', {'ticker': 'aapl'})
+    assert WatchlistItem.objects.filter(user=user, ticker='AAPL').exists()
+
+
+@pytest.mark.django_db
+def test_watchlist_user_isolation(auth_client, user, other_user):
+    """The watchlist page should only show tickers belonging to the logged-in user."""
+    WatchlistItem.objects.create(user=other_user, ticker='MSFT')
+    response = auth_client.get('/watchlist/')
+    assert 'MSFT' not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_watchlist_remove_only_own_tickers(auth_client, user, other_user):
+    """A user's remove action should not affect another user's watchlist entries."""
+    WatchlistItem.objects.create(user=other_user, ticker='GOOG')
+    auth_client.post('/watchlist/remove/GOOG/')
+    assert WatchlistItem.objects.filter(user=other_user, ticker='GOOG').exists()

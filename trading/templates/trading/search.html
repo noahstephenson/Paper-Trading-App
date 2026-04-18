@@ -17,6 +17,7 @@
         <a href="/trade/new/">New Trade</a>
         <a href="/trades/">Trade History</a>
         <a href="/portfolio/">Portfolio</a>
+        <a href="/watchlist/">Watchlist</a>
         <span class="nav-user">
             <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
             <form method="post" action="{% url 'logout' %}">
@@ -53,6 +54,11 @@
             <p>This is a simple recent/current price from yfinance.</p>
             <p class="inline-actions">
                 <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Trade {{ ticker }}</a>
+                <form method="post" action="{% url 'trading:watchlist' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="ticker" value="{{ ticker }}">
+                    <button type="submit" class="button-link">+ Add to Watchlist</button>
+                </form>
             </p>
         </div>
     {% endif %}

@@ -6,7 +6,7 @@ from django.shortcuts import redirect, render
 import plotly.graph_objects as go
 import yfinance as yf
 
-from .models import Trade
+from .models import Trade, WatchlistItem
 # Create your views here.
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
@@ -49,30 +49,77 @@ def get_trade_balances(user, ticker, starting_cash):
 
 
 def index(request):
-    """Home page for the paper trading app."""
+    """Home page — shows a summary dashboard for logged-in users."""
+    if not request.user.is_authenticated:
+        return render(request, 'trading/index.html', {})
+
     starting_cash = Decimal('10000.00')
-    if request.user.is_authenticated:
-        trades = Trade.objects.filter(user=request.user)
-    else:
-        trades = Trade.objects.none()
-    trade_count = trades.count()
+    cash_balance = starting_cash
     holdings = {}
+    realized_gain = Decimal('0.00')
+
+    trades = Trade.objects.filter(user=request.user).order_by('created_at')
 
     for trade in trades:
+        trade_total = trade.quantity * trade.price
         if trade.ticker not in holdings:
-            holdings[trade.ticker] = 0
+            holdings[trade.ticker] = {'shares': 0, 'total_cost': Decimal('0.00')}
 
-        if trade.trade_type == 'BUY':
-            holdings[trade.ticker] += trade.quantity
-        elif trade.trade_type == 'SELL':
-            holdings[trade.ticker] -= trade.quantity
+        if trade.trade_type == Trade.BUY:
+            holdings[trade.ticker]['shares'] += trade.quantity
+            holdings[trade.ticker]['total_cost'] += trade_total
+            cash_balance -= trade_total
+        elif trade.trade_type == Trade.SELL:
+            current_shares = holdings[trade.ticker]['shares']
+            if current_shares > 0:
+                avg_cost = holdings[trade.ticker]['total_cost'] / Decimal(current_shares)
+                realized_gain += trade_total - avg_cost * trade.quantity
+                holdings[trade.ticker]['total_cost'] -= avg_cost * trade.quantity
+            holdings[trade.ticker]['shares'] -= trade.quantity
+            cash_balance += trade_total
 
-    active_holdings_count = sum(1 for shares in holdings.values() if shares > 0)
+    total_holdings_value = Decimal('0.00')
+    unrealized_gain = Decimal('0.00')
+    daily_change = Decimal('0.00')
+    holding_rows = []
+
+    for ticker, data in holdings.items():
+        shares = data['shares']
+        if shares <= 0:
+            continue
+        try:
+            stock = yf.Ticker(ticker)
+            hist = stock.history(period='2d')
+            if not hist.empty:
+                current_price = Decimal(str(round(float(hist['Close'].iloc[-1]), 2)))
+                total_value = shares * current_price
+                total_holdings_value += total_value
+                unrealized_gain += total_value - data['total_cost']
+                if len(hist) >= 2:
+                    prev_price = Decimal(str(round(float(hist['Close'].iloc[-2]), 2)))
+                    daily_change += (current_price - prev_price) * shares
+                holding_rows.append({
+                    'ticker': ticker,
+                    'shares': shares,
+                    'total_value': total_value,
+                    'gain_loss': total_value - data['total_cost'],
+                })
+        except Exception:
+            pass
+
+    total_portfolio_value = cash_balance + total_holdings_value
+    top_holdings = sorted(holding_rows, key=lambda r: r['total_value'], reverse=True)[:5]
+    recent_trades = Trade.objects.filter(user=request.user).order_by('-created_at')[:5]
 
     return render(request, 'trading/index.html', {
         'starting_cash': starting_cash,
-        'trade_count': trade_count,
-        'active_holdings_count': active_holdings_count,
+        'total_portfolio_value': total_portfolio_value,
+        'cash_balance': cash_balance,
+        'unrealized_gain': unrealized_gain,
+        'realized_gain': realized_gain,
+        'daily_change': daily_change,
+        'top_holdings': top_holdings,
+        'recent_trades': recent_trades,
     })
 
 
@@ -179,6 +226,7 @@ def create_trade(request):
     # Start the paper trading account with a simple fixed cash amount.
     starting_cash = Decimal('10000.00')
     ticker = request.GET.get('ticker', '').strip().upper() if request.method == 'GET' else ''
+    ticker_prefilled = bool(ticker)
     trade_type = 'BUY'
     quantity = ''
     success_message = request.session.pop('trade_success_message', None)
@@ -303,6 +351,7 @@ def create_trade(request):
 
     return render(request, 'trading/trade_form.html', {
         'ticker': ticker,
+        'ticker_prefilled': ticker_prefilled,
         'trade_type': trade_type,
         'quantity': quantity,
         'success_message': success_message,
@@ -468,6 +517,32 @@ def portfolio(request):
         'allocation_chart': allocation_chart,
         'gain_loss_chart': gain_loss_chart,
     })
+
+
+@login_required
+def watchlist(request):
+    """Show the user's watchlist and allow adding tickers."""
+    if request.method == 'POST':
+        ticker = request.POST.get('ticker', '').strip().upper()
+        if ticker:
+            WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
+        return redirect('trading:watchlist')
+
+    items = WatchlistItem.objects.filter(user=request.user).order_by('ticker')
+    enriched = []
+    for item in items:
+        price = fetch_latest_price(item.ticker)
+        enriched.append({'ticker': item.ticker, 'price': price, 'added_at': item.added_at})
+
+    return render(request, 'trading/watchlist.html', {'watchlist': enriched})
+
+
+@login_required
+def remove_from_watchlist(request, ticker):
+    """Remove a ticker from the user's watchlist."""
+    if request.method == 'POST':
+        WatchlistItem.objects.filter(user=request.user, ticker=ticker.upper()).delete()
+    return redirect('trading:watchlist')
 
 
 @login_required
