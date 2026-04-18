@@ -49,6 +49,15 @@
         </div>
     </div>
 
+    {% if allocation_chart %}
+        <div class="chart-row">
+            <div class="chart-box">{{ allocation_chart|safe }}</div>
+            {% if gain_loss_chart %}
+                <div class="chart-box">{{ gain_loss_chart|safe }}</div>
+            {% endif %}
+        </div>
+    {% endif %}
+
     {% if portfolio_rows %}
         <table>
             <tr>

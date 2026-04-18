@@ -415,6 +415,49 @@ def portfolio(request):
     # Total account value is the cash plus the current holdings value.
     total_account_value = cash_balance + total_holdings_value
 
+    # Build Plotly charts if the user has any priced holdings.
+    priced_rows = [r for r in portfolio_rows if r['total_value'] is not None]
+    allocation_chart = None
+    gain_loss_chart = None
+
+    if priced_rows:
+        # Pie chart: how the account is split across holdings and cash.
+        pie_labels = [r['ticker'] for r in priced_rows] + ['Cash']
+        pie_values = [float(r['total_value']) for r in priced_rows] + [float(cash_balance)]
+        pie_fig = go.Figure(go.Pie(
+            labels=pie_labels,
+            values=pie_values,
+            hole=0.4,
+            textinfo='label+percent',
+        ))
+        pie_fig.update_layout(
+            title='Portfolio Allocation',
+            margin=dict(t=50, b=20, l=20, r=20),
+            height=350,
+        )
+        allocation_chart = pie_fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+        # Bar chart: gain/loss per ticker, green if up, red if down.
+        gl_rows = [r for r in priced_rows if r['gain_loss'] is not None]
+        if gl_rows:
+            bar_tickers = [r['ticker'] for r in gl_rows]
+            bar_values = [float(r['gain_loss']) for r in gl_rows]
+            bar_colors = ['#27ae60' if v >= 0 else '#c0392b' for v in bar_values]
+            bar_fig = go.Figure(go.Bar(
+                x=bar_tickers,
+                y=bar_values,
+                marker_color=bar_colors,
+                text=[f'${v:+.2f}' for v in bar_values],
+                textposition='outside',
+            ))
+            bar_fig.update_layout(
+                title='Gain / Loss by Ticker',
+                yaxis_title='Dollars ($)',
+                margin=dict(t=50, b=20, l=20, r=20),
+                height=350,
+            )
+            gain_loss_chart = bar_fig.to_html(full_html=False, include_plotlyjs=False)
+
     return render(request, 'trading/portfolio.html', {
         'portfolio_rows': portfolio_rows,
         'starting_cash': starting_cash,
@@ -422,6 +465,8 @@ def portfolio(request):
         'total_holdings_value': total_holdings_value,
         'total_account_value': total_account_value,
         'trades_cleared': trades_cleared,
+        'allocation_chart': allocation_chart,
+        'gain_loss_chart': gain_loss_chart,
     })
 
 
