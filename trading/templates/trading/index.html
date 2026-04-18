@@ -11,7 +11,7 @@
     <p>Practice simple stock trades with virtual money.</p>
 
     <!-- Keep the main navigation the same on every page. -->
-    <p class="site-nav">
+    <div class="site-nav">
         {% if user.is_authenticated %}
             <a href="/">Home</a>
             <a href="/search/">Search</a>
@@ -31,7 +31,7 @@
             <a href="{% url 'register' %}">Create Account</a>
             <a href="/admin/">Admin</a>
         {% endif %}
-    </p>
+    </div>
 
     {% if user.is_authenticated %}
         <h2>Quick Summary</h2>
