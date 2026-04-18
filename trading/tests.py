@@ -128,6 +128,35 @@ class TradingViewsTests(TestCase):
         self.assertContains(response, '2.88%')
         self.assertContains(response, 'Trade AAPL')
 
+    @patch('trading.views.yf.Ticker')
+    def test_search_shows_plotly_chart_for_valid_ticker(self, mock_ticker):
+        """A valid ticker search should include a Plotly chart in the response."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.info = {'shortName': 'Apple Inc.'}
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [120.00, 123.45],
+            'High': [121.00, 125.00],
+            'Low': [119.50, 122.00],
+        })
+
+        response = self.client.get('/search/', {'ticker': 'AAPL'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'plotly')
+
+    @patch('trading.views.yf.Ticker')
+    def test_search_shows_no_chart_for_invalid_ticker(self, mock_ticker):
+        """An invalid ticker should not show a chart."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.info = {}
+        mock_ticker.return_value.history.return_value = pd.DataFrame()
+
+        response = self.client.get('/search/', {'ticker': 'ZZZZ'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'plotly')
+        self.assertContains(response, 'No stock data was found for that ticker.')
+
     def test_trade_page_prefills_ticker_from_search_query(self):
         """The trade form should prefill a ticker passed from the search page."""
         self.client.force_login(self.user)
