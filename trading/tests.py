@@ -402,6 +402,74 @@ class TradingViewsTests(TestCase):
         self.assertContains(response, 'You cannot sell more shares than you currently own.')
         self.assertEqual(Trade.objects.filter(user=self.user).count(), 0)
 
+    @patch('trading.views.yf.Ticker')
+    def test_zero_quantity_is_blocked(self, mock_ticker):
+        """The app should block trades with a quantity of zero."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [100.00],
+        })
+
+        response = self.client.post('/trade/new/', {
+            'ticker': 'AAPL',
+            'trade_type': 'BUY',
+            'quantity': '0',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Quantity must be greater than zero.')
+        self.assertEqual(Trade.objects.count(), 0)
+
+    @patch('trading.views.yf.Ticker')
+    def test_negative_quantity_is_blocked(self, mock_ticker):
+        """The app should block trades with a negative quantity."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [100.00],
+        })
+
+        response = self.client.post('/trade/new/', {
+            'ticker': 'AAPL',
+            'trade_type': 'BUY',
+            'quantity': '-5',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Quantity must be greater than zero.')
+        self.assertEqual(Trade.objects.count(), 0)
+
+    @patch('trading.views.yf.Ticker')
+    def test_non_numeric_quantity_is_blocked(self, mock_ticker):
+        """The app should block trades where quantity is not a number."""
+        self.client.force_login(self.user)
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [100.00],
+        })
+
+        response = self.client.post('/trade/new/', {
+            'ticker': 'AAPL',
+            'trade_type': 'BUY',
+            'quantity': 'abc',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Enter a valid quantity.')
+        self.assertEqual(Trade.objects.count(), 0)
+
+    def test_empty_ticker_is_blocked(self):
+        """The app should block a trade submission with no ticker."""
+        self.client.force_login(self.user)
+
+        response = self.client.post('/trade/new/', {
+            'ticker': '',
+            'trade_type': 'BUY',
+            'quantity': '5',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Please fill in every field.')
+        self.assertEqual(Trade.objects.count(), 0)
+
     def test_trade_history_only_shows_logged_in_users_trades(self):
         """Trade history should only show trades for the logged-in user."""
         self.client.force_login(self.user)
