@@ -3,6 +3,7 @@ from decimal import Decimal, InvalidOperation
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
+import plotly.graph_objects as go
 import yfinance as yf
 
 from .models import Trade
@@ -100,6 +101,7 @@ def search(request):
     price = None
     company_name = None
     stock_details = None
+    chart_html = None
     error_message = None
 
     if 'ticker' in request.GET:
@@ -134,6 +136,26 @@ def search(request):
                         stock_details['previous_close'] = previous_close
                         stock_details['daily_change'] = daily_change
                         stock_details['daily_change_percent'] = daily_change_percent
+                    # Build a 30-day closing price chart for this ticker.
+                    try:
+                        hist = stock.history(period='1mo')
+                        if not hist.empty:
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(
+                                x=hist.index,
+                                y=hist['Close'],
+                                mode='lines',
+                                name='Close',
+                            ))
+                            fig.update_layout(
+                                title=f'{ticker} — Last 30 Days',
+                                xaxis_title='Date',
+                                yaxis_title='Price (USD)',
+                                margin=dict(l=40, r=20, t=50, b=40),
+                            )
+                            chart_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+                    except Exception:
+                        chart_html = None
                 else:
                     error_message = 'No stock data was found for that ticker.'
             except Exception:
@@ -146,6 +168,7 @@ def search(request):
         'price': price,
         'company_name': company_name,
         'stock_details': stock_details,
+        'chart_html': chart_html,
         'error_message': error_message,
     })
 
