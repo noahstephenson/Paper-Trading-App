@@ -29,20 +29,23 @@
         <!-- Django requires a CSRF token for POST forms. -->
         {% csrf_token %}
 
-        <label for="ticker">Ticker Symbol:</label>
-        <input type="text" id="ticker" name="ticker" value="{{ ticker }}">
-        <br><br>
+        <div class="form-group">
+            <label for="ticker">Ticker Symbol:</label>
+            <input type="text" id="ticker" name="ticker" value="{{ ticker }}">
+        </div>
 
-        <label for="trade_type">Trade Type:</label>
-        <select id="trade_type" name="trade_type">
-            <option value="BUY" {% if trade_type == 'BUY' %}selected{% endif %}>Buy</option>
-            <option value="SELL" {% if trade_type == 'SELL' %}selected{% endif %}>Sell</option>
-        </select>
-        <br><br>
+        <div class="form-group">
+            <label for="trade_type">Trade Type:</label>
+            <select id="trade_type" name="trade_type">
+                <option value="BUY" {% if trade_type == 'BUY' %}selected{% endif %}>Buy</option>
+                <option value="SELL" {% if trade_type == 'SELL' %}selected{% endif %}>Sell</option>
+            </select>
+        </div>
 
-        <label for="quantity">Quantity:</label>
-        <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
-        <br><br>
+        <div class="form-group">
+            <label for="quantity">Quantity:</label>
+            <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
+        </div>
 
         <button type="submit">Submit Trade</button>
     </form>

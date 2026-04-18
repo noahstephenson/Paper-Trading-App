@@ -109,7 +109,7 @@
 
         <form method="post" action="/demo/clear/" style="margin-top: 1rem;">
             {% csrf_token %}
-            <button type="submit">Clear All Trades</button>
+            <button type="submit" class="button-danger">Clear All Trades</button>
         </form>
     {% else %}
         <div class="empty-state">

@@ -8,7 +8,13 @@ body {
     background-color: #f7f7f7;
 }
 
-h1,
+h1 {
+    color: #1f2933;
+    border-bottom: 2px solid #d8dee4;
+    padding-bottom: 10px;
+    margin-bottom: 8px;
+}
+
 h2 {
     color: #1f2933;
 }
@@ -37,6 +43,9 @@ a:hover {
 .site-nav form {
     display: inline;
     margin: 0;
+    padding: 0;
+    background: none;
+    border: none;
 }
 
 form {
@@ -45,6 +54,10 @@ form {
     background-color: #ffffff;
     border: 1px solid #d8dee4;
     border-radius: 6px;
+}
+
+.form-group {
+    margin-bottom: 16px;
 }
 
 label {
@@ -69,6 +82,12 @@ select {
     box-sizing: border-box;
 }
 
+input:focus,
+select:focus {
+    outline: 2px solid #0b5cab;
+    border-color: #0b5cab;
+}
+
 button {
     background-color: #0b5cab;
     color: #ffffff;
@@ -78,6 +97,15 @@ button {
 
 button:hover {
     background-color: #094d91;
+}
+
+.button-danger {
+    background-color: #c0392b;
+    border-color: #c0392b;
+}
+
+.button-danger:hover {
+    background-color: #a93226;
 }
 
 table {
@@ -96,6 +124,14 @@ td {
 
 th {
     background-color: #eef3f8;
+}
+
+tbody tr:nth-child(even) {
+    background-color: #f7fafd;
+}
+
+tbody tr:hover {
+    background-color: #e8f0f8;
 }
 
 .message {
@@ -169,4 +205,19 @@ th {
     background-color: #ffffff;
     border: 1px solid #d8dee4;
     border-radius: 6px;
+}
+
+.summary-card strong {
+    display: block;
+    font-size: 0.8rem;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+}
+
+.summary-card div {
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #1f2933;
 }

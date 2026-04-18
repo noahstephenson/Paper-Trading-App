@@ -58,7 +58,7 @@
         <form method="post" action="/demo/clear/">
             <!-- This button removes every saved trade. -->
             {% csrf_token %}
-            <button type="submit">Clear All Trades</button>
+            <button type="submit" class="button-danger">Clear All Trades</button>
         </form>
     {% endif %}
 </body>
