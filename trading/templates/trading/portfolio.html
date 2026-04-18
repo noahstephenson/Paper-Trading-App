@@ -57,6 +57,7 @@
                 <th>Total Gain/Loss</th>
                 <th>Gain/Loss Per Share</th>
                 <th>Gain/Loss %</th>
+                <th>Action</th>
             </tr>
             {% for row in portfolio_rows %}
                 <tr>
@@ -98,9 +99,17 @@
                             Gain/loss unavailable
                         {% endif %}
                     </td>
+                    <td>
+                        <a class="button-link" href="/trade/new/?ticker={{ row.ticker }}">Trade</a>
+                    </td>
                 </tr>
             {% endfor %}
         </table>
+
+        <form method="post" action="/demo/clear/" style="margin-top: 1rem;">
+            {% csrf_token %}
+            <button type="submit">Clear All Trades</button>
+        </form>
     {% else %}
         <div class="empty-state">
             <p>No holdings to show yet.</p>

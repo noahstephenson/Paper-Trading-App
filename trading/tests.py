@@ -334,6 +334,46 @@ class TradingViewsTests(TestCase):
         self.assertContains(response, '$150.00')
         self.assertContains(response, '$450.00')
 
+    @patch('trading.views.yf.Ticker')
+    def test_portfolio_excludes_fully_sold_holdings(self, mock_ticker):
+        """A ticker where all shares were sold should not appear in the portfolio."""
+        self.client.force_login(self.user)
+        Trade.objects.create(
+            user=self.user, ticker='AAPL', trade_type='BUY',
+            quantity=3, price=Decimal('100.00'),
+        )
+        Trade.objects.create(
+            user=self.user, ticker='AAPL', trade_type='SELL',
+            quantity=3, price=Decimal('110.00'),
+        )
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [115.00],
+        })
+
+        response = self.client.get('/portfolio/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'AAPL')
+        self.assertContains(response, 'No holdings to show yet.')
+
+    @patch('trading.views.yf.Ticker')
+    def test_portfolio_only_shows_current_users_holdings(self, mock_ticker):
+        """Another user's trades should not appear in the portfolio."""
+        self.client.force_login(self.user)
+        Trade.objects.create(
+            user=self.other_user, ticker='MSFT', trade_type='BUY',
+            quantity=5, price=Decimal('200.00'),
+        )
+        mock_ticker.return_value.history.return_value = pd.DataFrame({
+            'Close': [210.00],
+        })
+
+        response = self.client.get('/portfolio/')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'MSFT')
+        self.assertContains(response, 'No holdings to show yet.')
+
     def test_trade_history_shows_formatted_date(self):
         """The trade history page should show a readable trade date."""
         self.client.force_login(self.user)
