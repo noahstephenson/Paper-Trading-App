@@ -89,6 +89,19 @@ Must handle: missing ticker, invalid ticker, quantity ≤ 0, invalid trade type,
 
 Always ask: Is this needed for the MVP? Is this the simplest way? Can I explain this easily? If not — simplify.
 
+## From MVP to Final Product
+
+After the MVP is working, the next phase is to make the application fully functional end-to-end. The final product should support complete user workflows: account login/authentication, stock search with yfinance data, simulated buy and sell trades, and persistent portfolio tracking in SQLite. The portfolio should update correctly based on saved trades, and users should be able to view both their transaction history and their current holdings.
+
+Compared to the MVP, the full product should improve completeness and polish rather than change the core concept. The main additions are:
+- fully working portfolio management
+- stronger database-backed trade and holdings logic
+- basic visualizations for stock price history and portfolio performance
+- improved testing, debugging, and UI clarity
+- optional extra features only if time remains after the core app is stable
+
+The final product should still remain simple and explainable. Core workflows and reliability matter more than advanced features. Charts and extra strategy ideas are secondary to having a clean, working paper trading app that demonstrates effective use of basic Django concepts.
+
 ## Demo Scenarios
 - Login as testuser / password123
 - Search AAPL, execute a buy
