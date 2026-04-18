@@ -7,12 +7,14 @@ I kept the project intentionally small. The goal was not to build a full trading
 ## What The App Does
 
 - lets a user create an account, log in, and log out
+- shows the logged-in username in the top-right corner of the nav bar on every page
 - looks up stock prices with `yfinance`
-- shows a few extra stock details on the search page, like previous close and day range
+- shows stock details on the search page like previous close, day range, and daily change
+- displays a 30-day closing price chart on the search page using Plotly
 - saves paper `BUY` and `SELL` trades in SQLite
 - uses a two-step trade flow so the user can review the price before confirming the trade
 - lets the user jump from search results straight into the trade page with the ticker prefilled
-- shows a portfolio page based on saved trades
+- shows a portfolio page based on saved trades, including average cost, gain/loss, and two Plotly charts
 - shows a trade history page with past transactions
 - lets me inspect saved data in Django admin
 
@@ -32,7 +34,7 @@ The Mermaid diagrams below are there to make the app flow and page structure eas
 | Search | `/search/` | Search a ticker, view price details, and jump into a trade |
 | New Trade | `/trade/new/` | Enter a trade, review the fetched price, and save it |
 | Trade History | `/trades/` | See saved trades for the logged-in user |
-| Portfolio | `/portfolio/` | See current holdings and summary values |
+| Portfolio | `/portfolio/` | See current holdings, gain/loss metrics, and charts |
 | Admin | `/admin/` | Check saved data as an admin user |
 
 ## How The Pages Connect
@@ -212,13 +214,19 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-7. Start the server:
+7. Run the test suite (optional):
+
+```powershell
+pytest trading/tests.py -v
+```
+
+8. Start the server:
 
 ```powershell
 python manage.py runserver
 ```
 
-8. Open the app:
+9. Open the app:
 
 - App: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - Admin: [http://127.0.0.1:8000/admin/](http://127.0.0.1:8000/admin/)
@@ -229,20 +237,22 @@ If I were showing this project in class, this is the path I would take:
 
 1. Open the home page.
 2. Create an account or log in.
-3. Search a ticker like `AAPL`.
+3. Search a ticker like `AAPL` — see the 30-day price chart and stock details.
 4. Click into the trade page and enter a `BUY`.
-5. Review the fetched price.
+5. Review the fetched price on the confirmation step.
 6. Save the trade.
 7. Open trade history to show the saved row.
-8. Open portfolio to show the updated holdings.
-9. Open Django admin to show the data in the database.
+8. Open the portfolio page to show updated holdings, gain/loss metrics, and charts.
+9. Open Django admin to show the raw data in the database.
 
 ## Tech Used
 
 - Django
 - SQLite
-- `yfinance`
-- HTML templates
+- `yfinance` for live stock data
+- `Plotly` for interactive charts
+- HTML templates and basic CSS
+- `pytest` and `pytest-django` for the test suite
 - Mermaid for project diagrams
 
 ## Project Scope

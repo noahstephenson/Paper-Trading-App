@@ -21,19 +21,23 @@ from .views import fetch_latest_price, get_trade_balances
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
+# Shared fixtures are injected by name into any test that lists them as params.
 
 @pytest.fixture
 def user(db):
+    # A basic test user with no trades.
     return get_user_model().objects.create_user(username='trader1', password='testpass123')
 
 
 @pytest.fixture
 def other_user(db):
+    # A second user used to verify data isolation between accounts.
     return get_user_model().objects.create_user(username='trader2', password='testpass123')
 
 
 @pytest.fixture
 def auth_client(client, user):
+    # Django test client already logged in as `user`, skipping the login form.
     client.force_login(user)
     return client
 
@@ -230,6 +234,7 @@ def test_logout_post_redirects_to_home(auth_client):
 
 
 # ── Search ────────────────────────────────────────────────────────────────────
+# View tests use `with patch(...)` to replace yfinance so tests run offline.
 
 @pytest.mark.django_db
 def test_search_page_shows_price(auth_client):
