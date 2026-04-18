@@ -48,6 +48,13 @@ a:hover {
     border: none;
 }
 
+.nav-user {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 form {
     margin: 16px 0;
     padding: 16px;

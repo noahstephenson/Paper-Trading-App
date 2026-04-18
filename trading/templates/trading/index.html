@@ -17,12 +17,14 @@
             <a href="/search/">Search</a> |
             <a href="/trade/new/">New Trade</a> |
             <a href="/trades/">Trade History</a> |
-            <a href="/portfolio/">Portfolio</a> |
-            <form method="post" action="{% url 'logout' %}" style="display: inline;">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-            | {{ request.user.username }}
+            <a href="/portfolio/">Portfolio</a>
+            <span class="nav-user">
+                {{ request.user.username }}
+                <form method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button type="submit">Log Out</button>
+                </form>
+            </span>
         {% else %}
             <a href="/">Home</a> |
             <a href="{% url 'login' %}">Log In</a> |
@@ -54,12 +56,5 @@
     {% endif %}
     <br>
 
-    {% if user.is_authenticated %}
-        <form method="post" action="/demo/clear/">
-            <!-- This button removes every saved trade. -->
-            {% csrf_token %}
-            <button type="submit" class="button-danger">Clear All Trades</button>
-        </form>
-    {% endif %}
 </body>
 </html>
