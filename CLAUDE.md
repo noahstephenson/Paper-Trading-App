@@ -88,3 +88,9 @@ Must handle: missing ticker, invalid ticker, quantity ≤ 0, invalid trade type,
 **After coding**: explain what changed, the request/data flow, and what's worth understanding for class.
 
 Always ask: Is this needed for the MVP? Is this the simplest way? Can I explain this easily? If not — simplify.
+
+## Demo Scenarios
+- Login as testuser / password123
+- Search AAPL, execute a buy
+- Search TSLA, attempt to sell more than owned (show validation)
+- View portfolio page, explain computed balance

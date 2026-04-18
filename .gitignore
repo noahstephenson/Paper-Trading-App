@@ -9,3 +9,4 @@ media/
 staticfiles/
 .idea/
 .vscode/
+.claude/
