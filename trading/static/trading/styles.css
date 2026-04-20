@@ -187,6 +187,10 @@ tbody tr:hover {
 
 .inline-actions {
     margin-top: 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
 }
 
 .empty-state {
@@ -267,4 +271,37 @@ tbody tr:hover {
     margin: 4px 0 10px;
     font-size: 1rem;
     color: #1f2933;
+}
+
+.demo-clear {
+    margin: 12px 0;
+}
+
+.demo-clear form {
+    display: inline;
+    padding: 0;
+    margin: 0;
+    background: none;
+    border: none;
+}
+
+thead th {
+    background-color: #eef3f8;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #444;
+}
+
+td a {
+    color: #0b5cab;
+}
+
+.confirm-box table {
+    margin-top: 8px;
+}
+
+.confirm-box th {
+    width: 140px;
+    background-color: #f7fafd;
 }

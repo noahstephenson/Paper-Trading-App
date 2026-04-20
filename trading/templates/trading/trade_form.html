@@ -1,85 +1,61 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
-    <title>Enter Trade</title>
-</head>
-<body>
-    <h1>Enter a Paper Trade</h1>
-    <p>Use this form to save a buy or sell trade in the database.</p>
-    <p>When you submit the trade, the app will fetch the current market price and ask you to confirm it before saving.</p>
+{% extends "trading/base.html" %}
 
-    <!-- Keep the main navigation the same on every page. -->
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="/search/">Search</a>
-        <a href="/trade/new/">New Trade</a>
-        <a href="/trades/">Trade History</a>
-        <a href="/portfolio/">Portfolio</a>
-        <a href="/watchlist/">Watchlist</a>
-        <span class="nav-user">
-            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-        </span>
+{% block title %}Enter Trade{% endblock %}
+
+{% block content %}
+<h1>Enter a Paper Trade</h1>
+<p>Submit the form to fetch the current market price and review before saving.</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    <div class="form-group">
+        <label for="ticker">Ticker Symbol</label>
+        <input type="text" id="ticker" name="ticker" value="{{ ticker }}" placeholder="e.g. AAPL">
     </div>
 
-    <form method="post">
-        <!-- Django requires a CSRF token for POST forms. -->
-        {% csrf_token %}
+    <div class="form-group">
+        <label for="trade_type">Trade Type</label>
+        <select id="trade_type" name="trade_type">
+            <option value="BUY" {% if trade_type == 'BUY' %}selected{% endif %}>Buy</option>
+            <option value="SELL" {% if trade_type == 'SELL' %}selected{% endif %}>Sell</option>
+        </select>
+    </div>
 
-        <div class="form-group">
-            <label for="ticker">Ticker Symbol:</label>
-            <input type="text" id="ticker" name="ticker" value="{{ ticker }}">
-        </div>
+    <div class="form-group">
+        <label for="quantity">Quantity (shares)</label>
+        <input type="number" id="quantity" name="quantity" value="{{ quantity }}" min="1">
+    </div>
 
-        <div class="form-group">
-            <label for="trade_type">Trade Type:</label>
-            <select id="trade_type" name="trade_type">
-                <option value="BUY" {% if trade_type == 'BUY' %}selected{% endif %}>Buy</option>
-                <option value="SELL" {% if trade_type == 'SELL' %}selected{% endif %}>Sell</option>
-            </select>
-        </div>
+    <button type="submit">Review Trade</button>
+</form>
 
-        <div class="form-group">
-            <label for="quantity">Quantity:</label>
-            <input type="number" id="quantity" name="quantity" value="{{ quantity }}">
-        </div>
+{% if ticker_prefilled and not confirm_trade %}
+    <p class="message message-success">Ticker prefilled from your search. Change it if needed.</p>
+{% endif %}
 
-        <button type="submit">Submit Trade</button>
-    </form>
+{% if success_message %}
+    <p class="message message-success">{{ success_message }}</p>
+{% endif %}
 
-    {% if ticker_prefilled and not confirm_trade %}
-        <p class="message message-success">The ticker field was prefilled from your search. You can keep it or change it.</p>
-    {% endif %}
+{% if error_message %}
+    <p class="message message-error">{{ error_message }}</p>
+{% endif %}
 
-    {% if confirm_trade %}
-        <div class="confirm-box">
-        <h2>Review Trade Details</h2>
-        <p>Check the price below, then save the trade if it looks right.</p>
-        <p>Ticker: {{ ticker }}</p>
-        <p>Trade Type: {{ trade_type }}</p>
-        <p>Quantity: {{ quantity }}</p>
-        <p>Current price: ${{ quoted_price|floatformat:2 }}</p>
-        <p>Estimated total: ${{ estimated_total|floatformat:2 }}</p>
-
-        <form method="post">
+{% if confirm_trade %}
+    <div class="confirm-box">
+        <h2>Confirm Trade</h2>
+        <table>
+            <tr><th>Ticker</th><td>{{ ticker }}</td></tr>
+            <tr><th>Type</th><td class="{% if trade_type == 'BUY' %}trade-buy{% else %}trade-sell{% endif %}">{{ trade_type }}</td></tr>
+            <tr><th>Shares</th><td>{{ quantity }}</td></tr>
+            <tr><th>Price / Share</th><td>${{ quoted_price|floatformat:2 }}</td></tr>
+            <tr><th>Estimated Total</th><td>${{ estimated_total|floatformat:2 }}</td></tr>
+        </table>
+        <form method="post" style="margin-top: 12px; border: none; padding: 0; background: none;">
             {% csrf_token %}
-            <button type="submit" name="form_action" value="confirm">Save Trade</button>
+            <button type="submit" name="form_action" value="confirm">Confirm &amp; Save Trade</button>
         </form>
-        </div>
-    {% endif %}
-
-    {% if success_message %}
-        <p class="message message-success">{{ success_message }}</p>
-    {% endif %}
-
-    {% if error_message %}
-        <p class="message message-error">{{ error_message }}</p>
-    {% endif %}
-</body>
-</html>
+    </div>
+{% endif %}
+{% endblock %}

@@ -322,11 +322,10 @@ def test_trade_page_reviews_price_before_confirmation(auth_client):
 
     assert response.status_code == 200
     body = response.content.decode()
-    assert 'Review Trade Details' in body
-    assert 'Check the price below, then save the trade if it looks right.' in body
-    assert 'Current price: $250.00' in body
-    assert 'Estimated total: $500.00' in body
-    assert 'Save Trade' in body
+    assert 'Confirm Trade' in body
+    assert '$250.00' in body
+    assert '$500.00' in body
+    assert 'Confirm' in body
     assert Trade.objects.count() == 0
 
 
@@ -341,7 +340,7 @@ def test_buy_trade_saves(auth_client, user):
         response = auth_client.post('/trade/new/', {'form_action': 'confirm'}, follow=True)
 
     assert review_response.status_code == 200
-    assert 'Review Trade Details' in review_response.content.decode()
+    assert 'Confirm Trade' in review_response.content.decode()
     assert response.status_code == 200
     assert response.redirect_chain == [('/trade/new/', 302)]
     assert Trade.objects.count() == 1
@@ -672,3 +671,160 @@ def test_watchlist_remove_only_own_tickers(auth_client, user, other_user):
     WatchlistItem.objects.create(user=other_user, ticker='GOOG')
     auth_client.post('/watchlist/remove/GOOG/')
     assert WatchlistItem.objects.filter(user=other_user, ticker='GOOG').exists()
+
+
+# ── Auth: registration edge cases ─────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_register_shows_error_for_mismatched_passwords(client):
+    """Mismatched passwords should re-render the form with an error, not create a user."""
+    response = client.post('/accounts/register/', {
+        'username': 'newuser',
+        'password1': 'StrongPass123!',
+        'password2': 'DifferentPass456!',
+    })
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username='newuser').exists()
+    body = response.content.decode()
+    assert 'password' in body.lower()
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_too_short_password(client):
+    """A password shorter than 8 characters should fail validation."""
+    response = client.post('/accounts/register/', {
+        'username': 'newuser',
+        'password1': 'abc',
+        'password2': 'abc',
+    })
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username='newuser').exists()
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_common_password(client):
+    """A commonly used password like 'password123' should be rejected."""
+    response = client.post('/accounts/register/', {
+        'username': 'newuser',
+        'password1': 'password123',
+        'password2': 'password123',
+    })
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username='newuser').exists()
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_numeric_only_password(client):
+    """A password made entirely of numbers should be rejected."""
+    response = client.post('/accounts/register/', {
+        'username': 'newuser',
+        'password1': '12345678',
+        'password2': '12345678',
+    })
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username='newuser').exists()
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_duplicate_username(client):
+    """Registering with an already-taken username should fail."""
+    get_user_model().objects.create_user(username='taken', password='StrongPass123!')
+
+    response = client.post('/accounts/register/', {
+        'username': 'taken',
+        'password1': 'StrongPass123!',
+        'password2': 'StrongPass123!',
+    })
+
+    assert response.status_code == 200
+    assert get_user_model().objects.filter(username='taken').count() == 1
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_empty_username(client):
+    """Submitting an empty username should re-render the form with errors."""
+    response = client.post('/accounts/register/', {
+        'username': '',
+        'password1': 'StrongPass123!',
+        'password2': 'StrongPass123!',
+    })
+
+    assert response.status_code == 200
+    assert get_user_model().objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_register_shows_error_for_password_similar_to_username(client):
+    """A password that's too similar to the username should be rejected."""
+    response = client.post('/accounts/register/', {
+        'username': 'johndoe99',
+        'password1': 'johndoe99',
+        'password2': 'johndoe99',
+    })
+
+    assert response.status_code == 200
+    assert not get_user_model().objects.filter(username='johndoe99').exists()
+
+
+@pytest.mark.django_db
+def test_register_redirects_already_logged_in_user(auth_client):
+    """A logged-in user visiting the register page should be redirected to home."""
+    response = auth_client.get('/accounts/register/')
+
+    assert response.status_code == 302
+    assert response.url == '/'
+
+
+@pytest.mark.django_db
+def test_login_shows_error_for_wrong_password(client, user):
+    """Logging in with the wrong password should re-render the form with an error."""
+    response = client.post('/accounts/login/', {
+        'username': 'trader1',
+        'password': 'wrongpassword',
+    })
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'did not match' in body
+
+
+@pytest.mark.django_db
+def test_login_shows_error_for_nonexistent_user(client):
+    """Logging in with a username that doesn't exist should show an error."""
+    response = client.post('/accounts/login/', {
+        'username': 'ghost',
+        'password': 'StrongPass123!',
+    })
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'did not match' in body
+
+
+@pytest.mark.django_db
+def test_full_register_login_and_portfolio_flow(client):
+    """A new user can register, log in, and reach their empty portfolio."""
+    # Register
+    reg = client.post('/accounts/register/', {
+        'username': 'brandnew',
+        'password1': 'StrongPass123!',
+        'password2': 'StrongPass123!',
+    })
+    assert reg.status_code == 302
+    assert get_user_model().objects.filter(username='brandnew').exists()
+
+    # Log in
+    login = client.post('/accounts/login/', {
+        'username': 'brandnew',
+        'password': 'StrongPass123!',
+    })
+    assert login.status_code == 302
+
+    # View portfolio
+    portfolio = client.get('/portfolio/')
+    assert portfolio.status_code == 200
+    assert 'No holdings to show yet.' in portfolio.content.decode()

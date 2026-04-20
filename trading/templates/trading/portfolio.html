@@ -1,122 +1,122 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
-    <title>Portfolio</title>
-</head>
-<body>
-    <h1>Portfolio</h1>
-    <p>This page shows the current shares owned for each ticker.</p>
+{% extends "trading/base.html" %}
 
-    <!-- Keep the main navigation the same on every page. -->
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="/search/">Search</a>
-        <a href="/trade/new/">New Trade</a>
-        <a href="/trades/">Trade History</a>
-        <a href="/portfolio/">Portfolio</a>
-        <a href="/watchlist/">Watchlist</a>
-        <span class="nav-user">
-            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-        </span>
+{% block title %}Portfolio{% endblock %}
+
+{% block content %}
+<h1>Portfolio</h1>
+
+{% if trades_cleared %}
+    <p class="message message-success">All trades were cleared successfully.</p>
+{% endif %}
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <strong>Starting Cash</strong>
+        <div>${{ starting_cash|floatformat:2 }}</div>
     </div>
-
-    {% if trades_cleared %}
-        <p class="message message-success">All trades were cleared successfully.</p>
-    {% endif %}
-
-    <div class="summary-grid">
-        <div class="summary-card">
-            <strong>Starting Cash</strong>
-            <div>${{ starting_cash|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Cash Balance</strong>
-            <div>${{ cash_balance|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Total Holdings Value</strong>
-            <div>${{ total_holdings_value|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Total Account Value</strong>
-            <div>${{ total_account_value|floatformat:2 }}</div>
+    <div class="summary-card">
+        <strong>Cash Balance</strong>
+        <div>${{ cash_balance|floatformat:2 }}</div>
+    </div>
+    <div class="summary-card">
+        <strong>Holdings Value</strong>
+        <div>${{ total_holdings_value|floatformat:2 }}</div>
+    </div>
+    <div class="summary-card">
+        <strong>Total Account Value</strong>
+        <div>${{ total_account_value|floatformat:2 }}</div>
+    </div>
+    <div class="summary-card">
+        <strong>Realized Gain / Loss</strong>
+        <div class="{% if total_realized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+            ${{ total_realized_gain|floatformat:2 }}
         </div>
     </div>
+</div>
 
-    {% if allocation_chart %}
-        <div class="chart-row">
-            <div class="chart-box">{{ allocation_chart|safe }}</div>
-            {% if gain_loss_chart %}
-                <div class="chart-box">{{ gain_loss_chart|safe }}</div>
-            {% endif %}
-        </div>
-    {% endif %}
-
-    <div class="demo-clear">
-        <form method="post" action="/demo/clear/">
-            {% csrf_token %}
-            <button type="submit" class="button-link">Clear All Trades</button>
-        </form>
+{% if allocation_chart %}
+    <div class="chart-row">
+        <div class="chart-box">{{ allocation_chart|safe }}</div>
+        {% if cost_vs_value_chart %}
+            <div class="chart-box">{{ cost_vs_value_chart|safe }}</div>
+        {% endif %}
     </div>
+{% endif %}
 
-    {% if portfolio_rows %}
-        <table>
+{% if portfolio_history_chart %}
+    <div class="chart-box" style="margin: 16px 0;">{{ portfolio_history_chart|safe }}</div>
+{% endif %}
+
+{% if portfolio_rows %}
+    <table>
+        <thead>
             <tr>
                 <th>Ticker</th>
-                <th>Shares Owned</th>
-                <th>Average Cost</th>
+                <th>Shares</th>
+                <th>Avg Cost</th>
                 <th>Current Price</th>
                 <th>Total Value</th>
-                <th>Total Gain/Loss</th>
-                <th>Gain/Loss Per Share</th>
-                <th>Gain/Loss %</th>
+                <th>Unrealized G/L</th>
+                <th>G/L / Share</th>
+                <th>G/L %</th>
+                <th>Realized G/L</th>
                 <th>Action</th>
             </tr>
+        </thead>
+        <tbody>
             {% for row in portfolio_rows %}
                 <tr>
-                    <td>{{ row.ticker }}</td>
+                    <td><strong><a href="/stock/{{ row.ticker }}/">{{ row.ticker }}</a></strong></td>
                     <td>{{ row.shares }}</td>
                     <td>${{ row.average_cost|floatformat:2 }}</td>
                     <td>
                         {% if row.current_price %}
                             ${{ row.current_price|floatformat:2 }}
                         {% else %}
-                            Price unavailable
+                            <span style="color:#aaa;">Unavailable</span>
                         {% endif %}
                     </td>
                     <td>
                         {% if row.total_value %}
                             ${{ row.total_value|floatformat:2 }}
                         {% else %}
-                            Value unavailable
+                            <span style="color:#aaa;">Unavailable</span>
                         {% endif %}
                     </td>
                     <td>
-                        {% if row.gain_loss or row.gain_loss == 0 %}
-                            ${{ row.gain_loss|floatformat:2 }}
+                        {% if row.gain_loss is not None %}
+                            <span class="{% if row.gain_loss >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
+                                ${{ row.gain_loss|floatformat:2 }}
+                            </span>
                         {% else %}
-                            Gain/loss unavailable
+                            <span style="color:#aaa;">Unavailable</span>
                         {% endif %}
                     </td>
                     <td>
-                        {% if row.gain_loss_per_share or row.gain_loss_per_share == 0 %}
-                            ${{ row.gain_loss_per_share|floatformat:2 }}
+                        {% if row.gain_loss_per_share is not None %}
+                            <span class="{% if row.gain_loss_per_share >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
+                                ${{ row.gain_loss_per_share|floatformat:2 }}
+                            </span>
                         {% else %}
-                            Gain/loss unavailable
+                            <span style="color:#aaa;">&mdash;</span>
                         {% endif %}
                     </td>
                     <td>
-                        {% if row.gain_loss_percent or row.gain_loss_percent == 0 %}
-                            {{ row.gain_loss_percent|floatformat:2 }}%
+                        {% if row.gain_loss_percent is not None %}
+                            <span class="{% if row.gain_loss_percent >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
+                                {{ row.gain_loss_percent|floatformat:2 }}%
+                            </span>
                         {% else %}
-                            Gain/loss unavailable
+                            <span style="color:#aaa;">&mdash;</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.realized_gain %}
+                            <span class="{% if row.realized_gain >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
+                                ${{ row.realized_gain|floatformat:2 }}
+                            </span>
+                        {% else %}
+                            <span style="color:#aaa;">&mdash;</span>
                         {% endif %}
                     </td>
                     <td>
@@ -124,14 +124,13 @@
                     </td>
                 </tr>
             {% endfor %}
-        </table>
+        </tbody>
+    </table>
 
-    {% else %}
-        <div class="empty-state">
-            <p>No holdings to show yet.</p>
-            <p><a class="button-link" href="/search/">Search for a stock</a></p>
-        </div>
-    {% endif %}
-
-</body>
-</html>
+{% else %}
+    <div class="empty-state">
+        <p>No holdings to show yet.</p>
+        <p><a class="button-link" href="/search/">Search for a stock</a></p>
+    </div>
+{% endif %}
+{% endblock %}

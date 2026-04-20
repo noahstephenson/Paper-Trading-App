@@ -1,61 +1,62 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
-    <title>Trade History</title>
-</head>
-<body>
-    <h1>Trade History</h1>
-    <p>This page shows the trades saved in the database.</p>
+{% extends "trading/base.html" %}
 
-    <!-- Keep the main navigation the same on every page. -->
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="/search/">Search</a>
-        <a href="/trade/new/">New Trade</a>
-        <a href="/trades/">Trade History</a>
-        <a href="/portfolio/">Portfolio</a>
-        <a href="/watchlist/">Watchlist</a>
-        <span class="nav-user">
-            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-        </span>
+{% block title %}Trade History{% endblock %}
+
+{% block content %}
+<h1>Trade History</h1>
+
+{% if annotated_trades %}
+    <div class="summary-grid" style="margin-bottom: 20px;">
+        <div class="summary-card">
+            <strong>Total Realized Gain / Loss</strong>
+            <div class="{% if total_realized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+                ${{ total_realized_gain|floatformat:2 }}
+            </div>
+        </div>
     </div>
 
-    {% if trades %}
-        <table>
+    <table>
+        <thead>
             <tr>
                 <th>Ticker</th>
                 <th>Type</th>
-                <th>Quantity</th>
-                <th>Price Per Share</th>
-                <th>Total</th>
+                <th>Shares</th>
+                <th>Price / Share</th>
+                <th>Total Value</th>
+                <th>Realized Gain</th>
+                <th>Cash After</th>
                 <th>Date</th>
             </tr>
-            {% for trade in trades %}
+        </thead>
+        <tbody>
+            {% for item in annotated_trades %}
                 <tr>
-                    <td>{{ trade.ticker }}</td>
-                    <td class="{% if trade.trade_type == 'BUY' %}trade-buy{% else %}trade-sell{% endif %}">
-                        {{ trade.trade_type }}
+                    <td><strong><a href="/stock/{{ item.trade.ticker }}/">{{ item.trade.ticker }}</a></strong></td>
+                    <td class="{% if item.trade.trade_type == 'BUY' %}trade-buy{% else %}trade-sell{% endif %}">
+                        {{ item.trade.trade_type }}
                     </td>
-                    <td>{{ trade.quantity }}</td>
-                    <td>${{ trade.price|floatformat:2 }}</td>
-                    <td>${{ trade.total|floatformat:2 }}</td>
-                    <td>{{ trade.created_at|date:"M j, Y g:i a" }}</td>
+                    <td>{{ item.trade.quantity }}</td>
+                    <td>${{ item.trade.price|floatformat:2 }}</td>
+                    <td>${{ item.trade.total|floatformat:2 }}</td>
+                    <td>
+                        {% if item.realized_gain is not None %}
+                            <span class="{% if item.realized_gain >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
+                                ${{ item.realized_gain|floatformat:2 }}
+                            </span>
+                        {% else %}
+                            <span style="color:#aaa;">&mdash;</span>
+                        {% endif %}
+                    </td>
+                    <td>${{ item.running_cash|floatformat:2 }}</td>
+                    <td>{{ item.trade.created_at|date:"M j, Y g:i a" }}</td>
                 </tr>
             {% endfor %}
-        </table>
-    {% else %}
-        <div class="empty-state">
-            <p>No trades have been saved yet.</p>
-            <p><a class="button-link" href="/trade/new/">Go to New Trade</a></p>
-        </div>
-    {% endif %}
-
-</body>
-</html>
+        </tbody>
+    </table>
+{% else %}
+    <div class="empty-state">
+        <p>No trades have been saved yet.</p>
+        <p><a class="button-link" href="/trade/new/">Go to New Trade</a></p>
+    </div>
+{% endif %}
+{% endblock %}

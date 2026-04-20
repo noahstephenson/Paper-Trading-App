@@ -1,84 +1,94 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
-    <title>Paper Trading App</title>
-</head>
-<body>
-    <h1>Paper Trading App</h1>
+{% extends "trading/base.html" %}
+{% load static %}
 
-    {% if user.is_authenticated %}
+{% block title %}Paper Trading App{% endblock %}
 
-    <!-- Keep the main navigation the same on every page. -->
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="/search/">Search</a>
-        <a href="/trade/new/">New Trade</a>
-        <a href="/trades/">Trade History</a>
-        <a href="/portfolio/">Portfolio</a>
-        <a href="/watchlist/">Watchlist</a>
-        <span class="nav-user">
-            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-        </span>
+{% block nav %}
+{% if user.is_authenticated %}
+<div class="site-nav">
+    <a href="/">Home</a>
+    <a href="/search/">Search</a>
+    <a href="/trade/new/">New Trade</a>
+    <a href="/trades/">Trade History</a>
+    <a href="/portfolio/">Portfolio</a>
+    <a href="/watchlist/">Watchlist</a>
+    <span class="nav-user">
+        <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button type="submit">Log Out</button>
+        </form>
+    </span>
+</div>
+{% else %}
+<div class="site-nav">
+    <a href="/">Home</a>
+    <a href="{% url 'login' %}">Log In</a>
+    <a href="{% url 'register' %}">Create Account</a>
+    <a href="/admin/">Admin</a>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<h1>Paper Trading App</h1>
+
+{% if user.is_authenticated %}
+
+<h2>Dashboard</h2>
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <strong>Total Portfolio Value</strong>
+        <div>${{ total_portfolio_value|floatformat:2 }}</div>
     </div>
-
-    <h2>Dashboard</h2>
-
-    <div class="summary-grid">
-        <div class="summary-card">
-            <strong>Total Portfolio Value</strong>
-            <div>${{ total_portfolio_value|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Cash Balance</strong>
-            <div>${{ cash_balance|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Unrealized Gain / Loss</strong>
-            <div class="{% if unrealized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
-                ${{ unrealized_gain|floatformat:2 }}
-            </div>
-        </div>
-        <div class="summary-card">
-            <strong>Realized Gain / Loss</strong>
-            <div class="{% if realized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
-                ${{ realized_gain|floatformat:2 }}
-            </div>
-        </div>
-        <div class="summary-card">
-            <strong>Daily Change</strong>
-            <div class="{% if daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
-                ${{ daily_change|floatformat:2 }}
-            </div>
+    <div class="summary-card">
+        <strong>Cash Balance</strong>
+        <div>${{ cash_balance|floatformat:2 }}</div>
+    </div>
+    <div class="summary-card">
+        <strong>Unrealized Gain / Loss</strong>
+        <div class="{% if unrealized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+            ${{ unrealized_gain|floatformat:2 }}
         </div>
     </div>
-
-    <div class="inline-actions">
-        <a class="button-link" href="/search/">Search Stocks</a>
-        <a class="button-link" href="/trade/new/">New Trade</a>
-        <a class="button-link" href="/portfolio/">Full Portfolio</a>
+    <div class="summary-card">
+        <strong>Realized Gain / Loss</strong>
+        <div class="{% if realized_gain >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+            ${{ realized_gain|floatformat:2 }}
+        </div>
     </div>
+    <div class="summary-card">
+        <strong>Daily Change</strong>
+        <div class="{% if daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+            ${{ daily_change|floatformat:2 }}
+        </div>
+    </div>
+</div>
 
-    <div class="chart-row">
-        <div class="chart-box">
-            <h3>Top Holdings</h3>
-            {% if top_holdings %}
-                <table>
+<div class="inline-actions">
+    <a class="button-link" href="/search/">Search Stocks</a>
+    <a class="button-link" href="/trade/new/">New Trade</a>
+    <a class="button-link" href="/portfolio/">Full Portfolio</a>
+</div>
+
+<div class="chart-row">
+    <div class="chart-box">
+        <h3>Top Holdings</h3>
+        {% if top_holdings %}
+            <table>
+                <thead>
                     <tr>
                         <th>Ticker</th>
                         <th>Shares</th>
                         <th>Total Value</th>
                         <th>Gain / Loss</th>
                     </tr>
+                </thead>
+                <tbody>
                     {% for row in top_holdings %}
                         <tr>
-                            <td>{{ row.ticker }}</td>
+                            <td><a href="/stock/{{ row.ticker }}/">{{ row.ticker }}</a></td>
                             <td>{{ row.shares }}</td>
                             <td>${{ row.total_value|floatformat:2 }}</td>
                             <td class="{% if row.gain_loss >= 0 %}trade-buy{% else %}trade-sell{% endif %}">
@@ -86,19 +96,21 @@
                             </td>
                         </tr>
                     {% endfor %}
-                </table>
-            {% else %}
-                <div class="empty-state">
-                    <p>No holdings yet.</p>
-                    <p><a class="button-link" href="/trade/new/">Make your first trade</a></p>
-                </div>
-            {% endif %}
-        </div>
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-state">
+                <p>No holdings yet.</p>
+                <p><a class="button-link" href="/trade/new/">Make your first trade</a></p>
+            </div>
+        {% endif %}
+    </div>
 
-        <div class="chart-box">
-            <h3>Recent Transactions</h3>
-            {% if recent_trades %}
-                <table>
+    <div class="chart-box">
+        <h3>Recent Transactions</h3>
+        {% if recent_trades %}
+            <table>
+                <thead>
                     <tr>
                         <th>Ticker</th>
                         <th>Type</th>
@@ -106,9 +118,11 @@
                         <th>Price</th>
                         <th>Date</th>
                     </tr>
+                </thead>
+                <tbody>
                     {% for trade in recent_trades %}
                         <tr>
-                            <td>{{ trade.ticker }}</td>
+                            <td><a href="/stock/{{ trade.ticker }}/">{{ trade.ticker }}</a></td>
                             <td class="{% if trade.trade_type == 'BUY' %}trade-buy{% else %}trade-sell{% endif %}">
                                 {{ trade.trade_type }}
                             </td>
@@ -117,35 +131,27 @@
                             <td>{{ trade.created_at|date:"M j, Y" }}</td>
                         </tr>
                     {% endfor %}
-                </table>
-            {% else %}
-                <div class="empty-state">
-                    <p>No trades yet.</p>
-                </div>
-            {% endif %}
-        </div>
+                </tbody>
+            </table>
+        {% else %}
+            <div class="empty-state">
+                <p>No trades yet.</p>
+            </div>
+        {% endif %}
     </div>
+</div>
 
-    {% else %}
+{% else %}
 
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="{% url 'login' %}">Log In</a>
-        <a href="{% url 'register' %}">Create Account</a>
-        <a href="/admin/">Admin</a>
-    </div>
+<h2>Welcome</h2>
+<p>Create an account or log in to access your personal paper trading dashboard.</p>
 
-    <h2>Welcome</h2>
-    <p>Create an account or log in to access your personal paper trading dashboard.</p>
+<h2>What You Can Do</h2>
+<p>1. Log in to access your paper trading account.</p>
+<p>2. Search for a ticker and save BUY or SELL trades.</p>
+<p>3. Review your own trade history and portfolio summary.</p>
+<p><a class="button-link" href="{% url 'login' %}">Log In to Start Trading</a></p>
+<p style="margin-top: 8px;"><a href="{% url 'register' %}">Create an Account</a></p>
 
-    <h2>What You Can Do</h2>
-    <p>1. Log in to access your paper trading account.</p>
-    <p>2. Search for a ticker and save BUY or SELL trades.</p>
-    <p>3. Review your own trade history and portfolio summary.</p>
-    <p><a href="{% url 'login' %}">Log In to Start Trading</a></p>
-    <p><a href="{% url 'register' %}">Create an Account</a></p>
-
-    {% endif %}
-
-</body>
-</html>
+{% endif %}
+{% endblock %}

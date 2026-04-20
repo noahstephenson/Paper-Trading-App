@@ -1,104 +1,79 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'trading/styles.css' %}">
-    <title>Search Ticker</title>
-</head>
-<body>
-    <h1>Search for a Stock</h1>
-    <p>This page will let users search for a ticker symbol.</p>
+{% extends "trading/base.html" %}
 
-    <!-- Keep the main navigation the same on every page. -->
-    <div class="site-nav">
-        <a href="/">Home</a>
-        <a href="/search/">Search</a>
-        <a href="/trade/new/">New Trade</a>
-        <a href="/trades/">Trade History</a>
-        <a href="/portfolio/">Portfolio</a>
-        <a href="/watchlist/">Watchlist</a>
-        <span class="nav-user">
-            <span class="nav-username">Signed in as: <strong>{{ request.user.username }}</strong></span>
-            <form method="post" action="{% url 'logout' %}">
-                {% csrf_token %}
-                <button type="submit">Log Out</button>
-            </form>
-        </span>
+{% block title %}Search Stocks{% endblock %}
+
+{% block content %}
+<h1>Search for a Stock</h1>
+
+<form method="get" style="margin-bottom: 0;">
+    <div class="form-group" style="display:flex; gap:8px; align-items:flex-end;">
+        <div>
+            <label for="ticker">Ticker Symbol</label>
+            <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}" placeholder="e.g. AAPL">
+        </div>
+        <button type="submit">Search</button>
+    </div>
+</form>
+
+{% if not ticker and not error_message %}
+    <div class="empty-state">
+        <p>Try searching for a stock like <strong>AAPL</strong>, <strong>MSFT</strong>, or <strong>TSLA</strong>.</p>
+    </div>
+{% endif %}
+
+{% if error_message %}
+    <p class="message message-error">{{ error_message }}</p>
+{% endif %}
+
+{% if ticker and price %}
+    <h2>
+        {{ ticker }}{% if company_name %} &mdash; {{ company_name }}{% endif %}
+    </h2>
+
+    <div class="summary-grid">
+        <div class="summary-card">
+            <strong>Current Price</strong>
+            <div>${{ price|floatformat:2 }}</div>
+        </div>
+        {% if stock_details.previous_close %}
+        <div class="summary-card">
+            <strong>Previous Close</strong>
+            <div>${{ stock_details.previous_close|floatformat:2 }}</div>
+        </div>
+        {% endif %}
+        {% if stock_details.daily_change is not None %}
+        <div class="summary-card">
+            <strong>Daily Change</strong>
+            <div class="{% if stock_details.daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+                ${{ stock_details.daily_change|floatformat:2 }}
+                ({{ stock_details.daily_change_percent|floatformat:2 }}%)
+            </div>
+        </div>
+        {% endif %}
+        <div class="summary-card">
+            <strong>Day High</strong>
+            <div>${{ stock_details.day_high|floatformat:2 }}</div>
+        </div>
+        <div class="summary-card">
+            <strong>Day Low</strong>
+            <div>${{ stock_details.day_low|floatformat:2 }}</div>
+        </div>
     </div>
 
-    <form method="get">
-        <label for="ticker">Ticker Symbol:</label>
-        <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}">
-        <button type="submit">Search</button>
-    </form>
+    <div class="inline-actions" style="margin: 16px 0;">
+        <a class="button-link" href="/stock/{{ ticker }}/">View Detail</a>
+        <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Trade {{ ticker }}</a>
+        <form method="post" action="{% url 'trading:watchlist' %}" style="display:inline;">
+            {% csrf_token %}
+            <input type="hidden" name="ticker" value="{{ ticker }}">
+            <button type="submit" class="button-link">+ Watchlist</button>
+        </form>
+    </div>
+{% endif %}
 
-    {% if not ticker and not error_message %}
-        <div class="empty-state">
-            <p>Try searching for a stock like <strong>AAPL</strong>, <strong>MSFT</strong>, or <strong>TSLA</strong>.</p>
-        </div>
-    {% endif %}
-
-    {% if ticker %}
-        <h2>
-            {{ ticker }}
-            {% if company_name %}
-                - {{ company_name }}
-            {% endif %}
-        </h2>
-    {% endif %}
-
-    {% if price %}
-        <div class="confirm-box">
-            <p><strong>Current price:</strong> ${{ price|floatformat:2 }}</p>
-            <p>This is a simple recent/current price from yfinance.</p>
-            <p class="inline-actions">
-                <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Trade {{ ticker }}</a>
-                <form method="post" action="{% url 'trading:watchlist' %}" style="display:inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="ticker" value="{{ ticker }}">
-                    <button type="submit" class="button-link">+ Add to Watchlist</button>
-                </form>
-            </p>
-        </div>
-    {% endif %}
-
-    {% if stock_details %}
-        <table>
-            <tr>
-                <th>Previous Close</th>
-                <th>Day High</th>
-                <th>Day Low</th>
-                <th>Daily Change</th>
-            </tr>
-            <tr>
-                <td>
-                    {% if stock_details.previous_close %}
-                        ${{ stock_details.previous_close|floatformat:2 }}
-                    {% else %}
-                        Not available
-                    {% endif %}
-                </td>
-                <td>${{ stock_details.day_high|floatformat:2 }}</td>
-                <td>${{ stock_details.day_low|floatformat:2 }}</td>
-                <td>
-                    {% if stock_details.daily_change or stock_details.daily_change == 0 %}
-                        ${{ stock_details.daily_change|floatformat:2 }}
-                        ({{ stock_details.daily_change_percent|floatformat:2 }}%)
-                    {% else %}
-                        Not available
-                    {% endif %}
-                </td>
-            </tr>
-        </table>
-    {% endif %}
-
-    {% if chart_html %}
+{% if chart_html %}
+    <div class="chart-box" style="margin-top: 16px;">
         {{ chart_html|safe }}
-    {% endif %}
-
-    {% if error_message %}
-        <p class="message message-error">{{ error_message }}</p>
-    {% endif %}
-</body>
-</html>
+    </div>
+{% endif %}
+{% endblock %}

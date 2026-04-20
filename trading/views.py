@@ -7,9 +7,9 @@ import plotly.graph_objects as go
 import yfinance as yf
 
 from .models import Trade, WatchlistItem
-# Create your views here.
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
+STARTING_CASH = Decimal('10000.00')
 
 
 def fetch_latest_price(ticker):
@@ -47,54 +47,162 @@ def get_trade_balances(user, ticker, starting_cash):
     return cash_balance, current_shares
 
 
+def compute_trade_state(trades):
+    """
+    Process trades in chronological order and compute full account state.
+
+    Returns:
+        holdings: {ticker: {shares, avg_cost, realized_gain}} — only tickers with shares > 0
+        annotated_trades: [{trade, running_cash, realized_gain}] — chronological order
+        cash_balance: Decimal final cash
+        total_realized_gain: Decimal sum of all realized gains
+    """
+    cash = STARTING_CASH
+    state = {}    # ticker → {shares: int, total_cost: Decimal}
+    realized = {} # ticker → Decimal
+    annotated = []
+
+    for trade in sorted(trades, key=lambda t: t.created_at):
+        ticker = trade.ticker
+        qty = trade.quantity
+        price = trade.price
+
+        if ticker not in state:
+            state[ticker] = {'shares': 0, 'total_cost': Decimal('0.00')}
+
+        t_realized = None
+        if trade.trade_type == Trade.BUY:
+            state[ticker]['shares'] += qty
+            state[ticker]['total_cost'] += qty * price
+            cash -= qty * price
+        else:  # SELL
+            s = state[ticker]
+            avg = s['total_cost'] / Decimal(s['shares']) if s['shares'] > 0 else price
+            t_realized = Decimal(qty) * (price - avg)
+            s['total_cost'] -= avg * qty
+            s['shares'] -= qty
+            realized[ticker] = realized.get(ticker, Decimal('0.00')) + t_realized
+            cash += qty * price
+
+        annotated.append({
+            'trade': trade,
+            'running_cash': cash,
+            'realized_gain': t_realized,
+        })
+
+    holdings = {}
+    for ticker, s in state.items():
+        if s['shares'] > 0:
+            holdings[ticker] = {
+                'shares': s['shares'],
+                'avg_cost': s['total_cost'] / Decimal(s['shares']),
+                'realized_gain': realized.get(ticker, Decimal('0.00')),
+            }
+
+    total_realized = sum(realized.values(), Decimal('0.00'))
+    return holdings, annotated, cash, total_realized
+
+
+def build_portfolio_history(trades):
+    """
+    Build a daily portfolio value series using trade history and yfinance price data.
+    Returns (dates_list, values_list) for Plotly, or (None, None) if insufficient data.
+    """
+    import pandas as pd
+
+    if not trades:
+        return None, None
+
+    sorted_trades = sorted(trades, key=lambda t: t.created_at)
+    first_date = sorted_trades[0].created_at.date()
+    all_tickers = list({t.ticker for t in sorted_trades})
+
+    price_histories = {}
+    for ticker in all_tickers:
+        try:
+            hist = yf.Ticker(ticker).history(start=str(first_date))
+            if not hist.empty:
+                if hist.index.tz is not None:
+                    hist.index = hist.index.tz_convert(None)
+                price_histories[ticker] = hist['Close']
+        except Exception:
+            pass
+
+    if not price_histories:
+        return None, None
+
+    all_dates = pd.DatetimeIndex([])
+    for series in price_histories.values():
+        all_dates = all_dates.union(series.index)
+    all_dates = all_dates.sort_values()
+
+    for ticker in price_histories:
+        price_histories[ticker] = price_histories[ticker].reindex(all_dates).ffill()
+
+    cash = float(STARTING_CASH)
+    state = {}
+    trade_idx = 0
+    chart_dates = []
+    chart_values = []
+
+    for dt in all_dates:
+        dt_date = dt.date()
+        while trade_idx < len(sorted_trades) and sorted_trades[trade_idx].created_at.date() <= dt_date:
+            trade = sorted_trades[trade_idx]
+            ticker = trade.ticker
+            qty = trade.quantity
+            price = float(trade.price)
+            if ticker not in state:
+                state[ticker] = {'shares': 0, 'total_cost': 0.0}
+            if trade.trade_type == Trade.BUY:
+                state[ticker]['shares'] += qty
+                state[ticker]['total_cost'] += qty * price
+                cash -= qty * price
+            else:
+                s = state[ticker]
+                avg = s['total_cost'] / s['shares'] if s['shares'] > 0 else price
+                s['total_cost'] -= avg * qty
+                s['shares'] -= qty
+                cash += qty * price
+            trade_idx += 1
+
+        total = cash
+        for ticker, s in state.items():
+            if s['shares'] > 0 and ticker in price_histories:
+                p = price_histories[ticker].get(dt)
+                if p is not None and not pd.isna(p):
+                    total += s['shares'] * float(p)
+
+        chart_dates.append(dt)
+        chart_values.append(round(total, 2))
+
+    return chart_dates, chart_values
+
 
 def index(request):
     """Home page — shows a summary dashboard for logged-in users."""
     if not request.user.is_authenticated:
         return render(request, 'trading/index.html', {})
 
-    starting_cash = Decimal('10000.00')
-    cash_balance = starting_cash
-    holdings = {}
-    realized_gain = Decimal('0.00')
-
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
-
-    for trade in trades:
-        trade_total = trade.quantity * trade.price
-        if trade.ticker not in holdings:
-            holdings[trade.ticker] = {'shares': 0, 'total_cost': Decimal('0.00')}
-
-        if trade.trade_type == Trade.BUY:
-            holdings[trade.ticker]['shares'] += trade.quantity
-            holdings[trade.ticker]['total_cost'] += trade_total
-            cash_balance -= trade_total
-        elif trade.trade_type == Trade.SELL:
-            current_shares = holdings[trade.ticker]['shares']
-            if current_shares > 0:
-                avg_cost = holdings[trade.ticker]['total_cost'] / Decimal(current_shares)
-                realized_gain += trade_total - avg_cost * trade.quantity
-                holdings[trade.ticker]['total_cost'] -= avg_cost * trade.quantity
-            holdings[trade.ticker]['shares'] -= trade.quantity
-            cash_balance += trade_total
+    holdings, _, cash_balance, realized_gain = compute_trade_state(trades)
 
     total_holdings_value = Decimal('0.00')
     unrealized_gain = Decimal('0.00')
     daily_change = Decimal('0.00')
     holding_rows = []
 
-    for ticker, data in holdings.items():
-        shares = data['shares']
-        if shares <= 0:
-            continue
+    for ticker, h in holdings.items():
         try:
             stock = yf.Ticker(ticker)
             hist = stock.history(period='2d')
             if not hist.empty:
                 current_price = Decimal(str(round(float(hist['Close'].iloc[-1]), 2)))
+                shares = h['shares']
                 total_value = shares * current_price
+                cost_basis = h['avg_cost'] * shares
                 total_holdings_value += total_value
-                unrealized_gain += total_value - data['total_cost']
+                unrealized_gain += total_value - cost_basis
                 if len(hist) >= 2:
                     prev_price = Decimal(str(round(float(hist['Close'].iloc[-2]), 2)))
                     daily_change += (current_price - prev_price) * shares
@@ -102,7 +210,7 @@ def index(request):
                     'ticker': ticker,
                     'shares': shares,
                     'total_value': total_value,
-                    'gain_loss': total_value - data['total_cost'],
+                    'gain_loss': total_value - cost_basis,
                 })
         except Exception:
             pass
@@ -112,7 +220,7 @@ def index(request):
     recent_trades = Trade.objects.filter(user=request.user).order_by('-created_at')[:5]
 
     return render(request, 'trading/index.html', {
-        'starting_cash': starting_cash,
+        'starting_cash': STARTING_CASH,
         'total_portfolio_value': total_portfolio_value,
         'cash_balance': cash_balance,
         'unrealized_gain': unrealized_gain,
@@ -141,6 +249,7 @@ def register(request):
         'form': form,
     })
 
+
 @login_required
 def search(request):
     """Handle ticker search and fetch stock data."""
@@ -152,7 +261,6 @@ def search(request):
     error_message = None
 
     if 'ticker' in request.GET:
-        # Clean up the user's input so we search with a simple ticker value.
         ticker = request.GET['ticker'].strip().upper()
 
         if ticker:
@@ -183,7 +291,6 @@ def search(request):
                         stock_details['previous_close'] = previous_close
                         stock_details['daily_change'] = daily_change
                         stock_details['daily_change_percent'] = daily_change_percent
-                    # Build a 30-day closing price chart for this ticker.
                     try:
                         hist = stock.history(period='1mo')
                         if not hist.empty:
@@ -221,10 +328,91 @@ def search(request):
 
 
 @login_required
+def stock_detail(request, ticker):
+    """Dedicated page for a single stock — price info, chart, watchlist, and trade links."""
+    ticker = ticker.upper()
+
+    if request.method == 'POST':
+        action = request.POST.get('action', '')
+        if action == 'add_watchlist':
+            WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
+        elif action == 'remove_watchlist':
+            WatchlistItem.objects.filter(user=request.user, ticker=ticker).delete()
+        return redirect('trading:stock_detail', ticker=ticker)
+
+    price = None
+    company_name = None
+    stock_details = None
+    chart_html = None
+    error_message = None
+    on_watchlist = WatchlistItem.objects.filter(user=request.user, ticker=ticker).exists()
+
+    try:
+        stock = yf.Ticker(ticker)
+        data = stock.history(period='2d')
+        try:
+            company_name = stock.info.get('shortName')
+        except Exception:
+            company_name = None
+
+        if not data.empty:
+            latest_row = data.iloc[-1]
+            price = round(float(latest_row['Close']), 2)
+            stock_details = {
+                'day_high': round(float(latest_row['High']), 2),
+                'day_low': round(float(latest_row['Low']), 2),
+            }
+            if len(data) > 1:
+                previous_close = round(float(data['Close'].iloc[-2]), 2)
+                daily_change = round(price - previous_close, 2)
+                daily_change_percent = round((daily_change / previous_close) * 100, 2) if previous_close != 0 else 0
+                stock_details['previous_close'] = previous_close
+                stock_details['daily_change'] = daily_change
+                stock_details['daily_change_percent'] = daily_change_percent
+            try:
+                hist = stock.history(period='1mo')
+                if not hist.empty:
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=hist.index,
+                        y=hist['Close'],
+                        mode='lines',
+                        name='Close',
+                    ))
+                    fig.update_layout(
+                        title=f'{ticker} — Last 30 Days',
+                        xaxis_title='Date',
+                        yaxis_title='Price (USD)',
+                        margin=dict(l=40, r=20, t=50, b=40),
+                    )
+                    chart_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
+            except Exception:
+                chart_html = None
+        else:
+            error_message = 'No stock data found for that ticker.'
+    except Exception:
+        error_message = 'Could not fetch stock data right now.'
+
+    trades = Trade.objects.filter(user=request.user).order_by('created_at')
+    holdings, _, cash_balance, _ = compute_trade_state(trades)
+    shares_owned = holdings.get(ticker, {}).get('shares', 0)
+
+    return render(request, 'trading/stock_detail.html', {
+        'ticker': ticker,
+        'company_name': company_name,
+        'price': price,
+        'stock_details': stock_details,
+        'chart_html': chart_html,
+        'error_message': error_message,
+        'on_watchlist': on_watchlist,
+        'shares_owned': shares_owned,
+        'cash_balance': cash_balance,
+    })
+
+
+@login_required
 def create_trade(request):
     """Show a simple form and save a paper trade."""
-    # Start the paper trading account with a simple fixed cash amount.
-    starting_cash = Decimal('10000.00')
     ticker = request.GET.get('ticker', '').strip().upper() if request.method == 'GET' else ''
     ticker_prefilled = bool(ticker)
     trade_type = 'BUY'
@@ -235,12 +423,10 @@ def create_trade(request):
     quoted_price = None
     estimated_total = None
 
-    # Only allow confirmation right after a review step, not from an old page load.
     if request.method != 'POST':
         request.session.pop('pending_trade', None)
 
     if request.method == 'POST':
-        # A normal submit reviews the trade first. Only the confirm button saves it.
         form_action = request.POST.get('form_action', 'review')
 
         if form_action == 'confirm':
@@ -267,19 +453,16 @@ def create_trade(request):
                     cash_balance, current_shares = get_trade_balances(
                         request.user,
                         ticker,
-                        starting_cash,
+                        STARTING_CASH,
                     )
 
-                    # Block sells that are larger than the shares owned.
                     if trade_type == Trade.SELL and quantity_value > current_shares:
                         request.session.pop('pending_trade', None)
                         error_message = 'You cannot sell more shares than you currently own.'
-                    # Block buys that cost more cash than is available.
                     elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
                         request.session.pop('pending_trade', None)
                         error_message = 'You do not have enough cash to make that purchase.'
                     else:
-                        # Save one row in the Trade table using the reviewed server-side price.
                         Trade.objects.create(
                             user=request.user,
                             ticker=ticker,
@@ -296,12 +479,10 @@ def create_trade(request):
                         )
                         return redirect('trading:create_trade')
         else:
-            # Read the values the user typed into the form.
             ticker = request.POST.get('ticker', '').strip().upper()
             trade_type = request.POST.get('trade_type', 'BUY')
             quantity = request.POST.get('quantity', '').strip()
 
-            # Make sure the form is filled in before we try to review the trade.
             if ticker and trade_type and quantity:
                 if trade_type not in VALID_TRADE_TYPES:
                     error_message = 'Choose a valid trade type.'
@@ -310,7 +491,6 @@ def create_trade(request):
                         quantity_value = int(quantity)
 
                         if quantity_value > 0:
-                            # Automatically fetch the current market price for review.
                             try:
                                 price_value = fetch_latest_price(ticker)
                             except Exception:
@@ -323,13 +503,11 @@ def create_trade(request):
                                 cash_balance, current_shares = get_trade_balances(
                                     request.user,
                                     ticker,
-                                    starting_cash,
+                                    STARTING_CASH,
                                 )
 
-                                # Block sells that are larger than the shares owned.
                                 if trade_type == Trade.SELL and quantity_value > current_shares:
                                     error_message = 'You cannot sell more shares than you currently own.'
-                                # Block buys that cost more cash than is available.
                                 elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
                                     error_message = 'You do not have enough cash to make that purchase.'
                                 else:
@@ -364,113 +542,75 @@ def create_trade(request):
 
 @login_required
 def trade_history(request):
-    """Show all saved trades, newest first."""
-    # Load trades from the database so the template can display them.
-    trades = Trade.objects.filter(user=request.user).order_by('-created_at')
+    """Show all saved trades with running cash balance and realized gain on sells."""
+    trades = Trade.objects.filter(user=request.user).order_by('created_at')
+    _, annotated_trades, _, total_realized_gain = compute_trade_state(trades)
+    annotated_trades = list(reversed(annotated_trades))
 
     return render(request, 'trading/trade_history.html', {
-        'trades': trades,
+        'annotated_trades': annotated_trades,
+        'total_realized_gain': total_realized_gain,
     })
 
 
 @login_required
 def portfolio(request):
     """Show current holdings based on saved trades."""
-    # Show a simple message after clearing trades.
     trades_cleared = request.GET.get('demo') == 'cleared'
-    # Start with all saved trades in the database.
-    trades = Trade.objects.filter(user=request.user).order_by('ticker', 'created_at')
-    holdings = {}
-    # Give the paper trading account a simple starting cash amount.
-    starting_cash = Decimal('10000.00')
-    cash_balance = starting_cash
+    trades = Trade.objects.filter(user=request.user).order_by('created_at')
+
+    holdings, _, cash_balance, total_realized_gain = compute_trade_state(trades)
+
     total_holdings_value = Decimal('0.00')
-
-    # Go through each trade and update the running share total and cost basis.
-    for trade in trades:
-        if trade.ticker not in holdings:
-            holdings[trade.ticker] = {
-                'shares': 0,
-                'total_cost': Decimal('0.00'),
-            }
-
-        # Calculate how much money this trade changes in the account.
-        trade_total = trade.quantity * trade.price
-
-        if trade.trade_type == 'BUY':
-            holdings[trade.ticker]['shares'] += trade.quantity
-            holdings[trade.ticker]['total_cost'] += trade_total
-            cash_balance -= trade_total
-        elif trade.trade_type == 'SELL':
-            current_shares = holdings[trade.ticker]['shares']
-            current_total_cost = holdings[trade.ticker]['total_cost']
-
-            # Reduce remaining cost basis using the current average cost.
-            if current_shares > 0:
-                average_cost = current_total_cost / Decimal(current_shares)
-                holdings[trade.ticker]['total_cost'] -= average_cost * trade.quantity
-
-            holdings[trade.ticker]['shares'] -= trade.quantity
-            cash_balance += trade_total
-
-    # Convert the dictionary into a list the template can loop through.
     portfolio_rows = []
-    for ticker, holding_data in holdings.items():
-        shares = holding_data['shares']
-        # Only show tickers where the user still owns shares.
-        if shares > 0:
-            current_price = None
-            total_value = None
-            average_cost = holding_data['total_cost'] / Decimal(shares)
-            gain_loss = None
-            gain_loss_per_share = None
-            gain_loss_percent = None
 
-            try:
-                # Load the latest closing price for this ticker.
-                stock = yf.Ticker(ticker)
-                data = stock.history(period='1d')
+    for ticker, h in holdings.items():
+        shares = h['shares']
+        average_cost = h['avg_cost']
+        realized_gain = h['realized_gain']
+        current_price = None
+        total_value = None
+        gain_loss = None
+        gain_loss_per_share = None
+        gain_loss_percent = None
 
-                if not data.empty:
-                    latest_price = round(float(data['Close'].iloc[-1]), 2)
-                    current_price = Decimal(str(latest_price))
-                    total_value = shares * current_price
-                    gain_loss = total_value - holding_data['total_cost']
-                    gain_loss_per_share = current_price - average_cost
-                    if holding_data['total_cost'] > 0:
-                        gain_loss_percent = (
-                            gain_loss / holding_data['total_cost']
-                        ) * Decimal('100')
-                    total_holdings_value += total_value
-            except Exception:
-                # Keep the page working even if price data is unavailable.
-                current_price = None
-                total_value = None
-                gain_loss = None
-                gain_loss_per_share = None
-                gain_loss_percent = None
+        try:
+            stock = yf.Ticker(ticker)
+            data = stock.history(period='1d')
 
-            portfolio_rows.append({
-                'ticker': ticker,
-                'shares': shares,
-                'average_cost': average_cost,
-                'current_price': current_price,
-                'total_value': total_value,
-                'gain_loss': gain_loss,
-                'gain_loss_per_share': gain_loss_per_share,
-                'gain_loss_percent': gain_loss_percent,
-            })
+            if not data.empty:
+                latest_price = round(float(data['Close'].iloc[-1]), 2)
+                current_price = Decimal(str(latest_price))
+                total_value = shares * current_price
+                cost_basis = average_cost * shares
+                gain_loss = total_value - cost_basis
+                gain_loss_per_share = current_price - average_cost
+                if cost_basis > 0:
+                    gain_loss_percent = (gain_loss / cost_basis) * Decimal('100')
+                total_holdings_value += total_value
+        except Exception:
+            pass
 
-    # Total account value is the cash plus the current holdings value.
+        portfolio_rows.append({
+            'ticker': ticker,
+            'shares': shares,
+            'average_cost': average_cost,
+            'current_price': current_price,
+            'total_value': total_value,
+            'gain_loss': gain_loss,
+            'gain_loss_per_share': gain_loss_per_share,
+            'gain_loss_percent': gain_loss_percent,
+            'realized_gain': realized_gain,
+        })
+
     total_account_value = cash_balance + total_holdings_value
 
-    # Build Plotly charts if the user has any priced holdings.
     priced_rows = [r for r in portfolio_rows if r['total_value'] is not None]
     allocation_chart = None
-    gain_loss_chart = None
+    cost_vs_value_chart = None
+    portfolio_history_chart = None
 
     if priced_rows:
-        # Pie chart: how the account is split across holdings and cash.
         pie_labels = [r['ticker'] for r in priced_rows] + ['Cash']
         pie_values = [float(r['total_value']) for r in priced_rows] + [float(cash_balance)]
         pie_fig = go.Figure(go.Pie(
@@ -486,36 +626,79 @@ def portfolio(request):
         )
         allocation_chart = pie_fig.to_html(full_html=False, include_plotlyjs='cdn')
 
-        # Bar chart: gain/loss per ticker, green if up, red if down.
         gl_rows = [r for r in priced_rows if r['gain_loss'] is not None]
         if gl_rows:
             bar_tickers = [r['ticker'] for r in gl_rows]
-            bar_values = [float(r['gain_loss']) for r in gl_rows]
-            bar_colors = ['#27ae60' if v >= 0 else '#c0392b' for v in bar_values]
-            bar_fig = go.Figure(go.Bar(
+            cost_values = [float(r['average_cost'] * r['shares']) for r in gl_rows]
+            current_values = [float(r['total_value']) for r in gl_rows]
+            current_colors = ['#27ae60' if cv >= bv else '#c0392b'
+                              for cv, bv in zip(current_values, cost_values)]
+            bar_fig = go.Figure()
+            bar_fig.add_trace(go.Bar(
+                name='Cost Basis',
                 x=bar_tickers,
-                y=bar_values,
-                marker_color=bar_colors,
-                text=[f'${v:+.2f}' for v in bar_values],
-                textposition='outside',
+                y=cost_values,
+                marker_color='#6b9fd4',
+            ))
+            bar_fig.add_trace(go.Bar(
+                name='Current Value',
+                x=bar_tickers,
+                y=current_values,
+                marker_color=current_colors,
             ))
             bar_fig.update_layout(
-                title='Gain / Loss by Ticker',
+                barmode='group',
+                title='Cost Basis vs Current Value',
                 yaxis_title='Dollars ($)',
-                margin=dict(t=50, b=20, l=20, r=20),
+                margin=dict(t=50, b=30, l=20, r=20),
                 height=350,
+                legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
             )
-            gain_loss_chart = bar_fig.to_html(full_html=False, include_plotlyjs=False)
+            cost_vs_value_chart = bar_fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+    try:
+        all_trades_list = list(trades)
+        hist_dates, hist_values = build_portfolio_history(all_trades_list)
+        if hist_dates and hist_values:
+            hist_fig = go.Figure()
+            hist_fig.add_trace(go.Scatter(
+                x=hist_dates,
+                y=hist_values,
+                mode='lines',
+                fill='tozeroy',
+                name='Portfolio Value',
+                line=dict(color='#0b5cab', width=2),
+                fillcolor='rgba(11,92,171,0.1)',
+            ))
+            hist_fig.add_hline(
+                y=float(STARTING_CASH),
+                line_dash='dash',
+                line_color='#aaa',
+                annotation_text='Starting Cash',
+                annotation_position='bottom right',
+            )
+            hist_fig.update_layout(
+                title='Portfolio Value Over Time',
+                xaxis_title='Date',
+                yaxis_title='Value ($)',
+                margin=dict(l=40, r=20, t=50, b=40),
+                height=380,
+            )
+            portfolio_history_chart = hist_fig.to_html(full_html=False, include_plotlyjs='cdn')
+    except Exception:
+        portfolio_history_chart = None
 
     return render(request, 'trading/portfolio.html', {
         'portfolio_rows': portfolio_rows,
-        'starting_cash': starting_cash,
+        'starting_cash': STARTING_CASH,
         'cash_balance': cash_balance,
         'total_holdings_value': total_holdings_value,
         'total_account_value': total_account_value,
+        'total_realized_gain': total_realized_gain,
         'trades_cleared': trades_cleared,
         'allocation_chart': allocation_chart,
-        'gain_loss_chart': gain_loss_chart,
+        'cost_vs_value_chart': cost_vs_value_chart,
+        'portfolio_history_chart': portfolio_history_chart,
     })
 
 
@@ -549,7 +732,6 @@ def remove_from_watchlist(request, ticker):
 def clear_trades(request):
     """Delete all trades so the app returns to an empty state."""
     if request.method == 'POST':
-        # Remove all saved trades from the database.
         Trade.objects.filter(user=request.user).delete()
         return redirect('/portfolio/?demo=cleared')
 

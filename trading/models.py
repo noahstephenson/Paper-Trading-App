@@ -37,11 +37,15 @@ class Trade(models.Model):
 
 
 class WatchlistItem(models.Model):
+    # Each watchlist entry belongs to one user.
     user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # The stock symbol the user wants to track, like AAPL or TSLA.
     ticker = models.CharField(max_length=10)
+    # Recorded automatically when the ticker is added.
     added_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
+        # Prevents adding the same ticker twice for the same user.
         unique_together = ('user', 'ticker')
 
     def __str__(self):

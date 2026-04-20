@@ -15,6 +15,7 @@ I kept the project intentionally small. The goal was not to build a full trading
 - uses a two-step trade flow so the user can review the price before confirming the trade
 - lets the user jump from search results straight into the trade page with the ticker prefilled
 - shows a portfolio page based on saved trades, including average cost, gain/loss, and two Plotly charts
+- shows a watchlist page where a user can save and track tickers they care about
 - shows a trade history page with past transactions
 - lets me inspect saved data in Django admin
 
@@ -28,13 +29,15 @@ The Mermaid diagrams below are there to make the app flow and page structure eas
 
 | Page | Route | What it is for |
 |---|---|---|
-| Home | `/` | Landing page and starting point |
+| Home | `/` | Landing page with dashboard summary for logged-in users |
 | Register | `/accounts/register/` | Create a new account |
 | Login | `/accounts/login/` | Log in to the app |
 | Search | `/search/` | Search a ticker, view price details, and jump into a trade |
+| Stock Detail | `/stock/<ticker>/` | Dedicated page for one ticker — chart, watchlist toggle, and trade links |
 | New Trade | `/trade/new/` | Enter a trade, review the fetched price, and save it |
 | Trade History | `/trades/` | See saved trades for the logged-in user |
 | Portfolio | `/portfolio/` | See current holdings, gain/loss metrics, and charts |
+| Watchlist | `/watchlist/` | Save and track tickers without placing a trade |
 | Admin | `/admin/` | Check saved data as an admin user |
 
 ## How The Pages Connect
@@ -47,9 +50,11 @@ flowchart TD
     Register([Register page])
     Login([Login page])
     Search([Search page])
+    StockDetail([Stock detail page])
     Trade([New trade page])
     History([Trade history page])
     Portfolio([Portfolio page])
+    Watchlist([Watchlist page])
     Admin([Admin page])
 
     Home --> Register
@@ -62,12 +67,17 @@ flowchart TD
     Login --> Trade
     Login --> History
     Login --> Portfolio
+    Login --> Watchlist
     Login --> Admin
+    Search --> StockDetail
     Search --> Trade
+    StockDetail --> Trade
+    StockDetail --> Watchlist
     Trade --> History
     Trade --> Portfolio
     History --> Portfolio
     Portfolio --> Search
+    Watchlist --> StockDetail
 ```
 
 ## App Structure
@@ -192,6 +202,12 @@ python -m venv .venv
 
 3. Activate the virtual environment:
 
+Git Bash:
+```bash
+source .venv/Scripts/activate
+```
+
+PowerShell:
 ```powershell
 .\.venv\Scripts\Activate.ps1
 ```
@@ -216,6 +232,12 @@ python manage.py createsuperuser
 
 7. Run the test suite (optional):
 
+Git Bash:
+```bash
+pytest trading/tests.py -v
+```
+
+PowerShell:
 ```powershell
 pytest trading/tests.py -v
 ```
@@ -236,14 +258,16 @@ python manage.py runserver
 If I were showing this project in class, this is the path I would take:
 
 1. Open the home page.
-2. Create an account or log in.
+2. Create an account or log in as `testuser` / `password123`.
 3. Search a ticker like `AAPL` — see the 30-day price chart and stock details.
-4. Click into the trade page and enter a `BUY`.
-5. Review the fetched price on the confirmation step.
-6. Save the trade.
-7. Open trade history to show the saved row.
-8. Open the portfolio page to show updated holdings, gain/loss metrics, and charts.
-9. Open Django admin to show the raw data in the database.
+4. Click the ticker to open the Stock Detail page — add it to the watchlist.
+5. Click into the trade page and enter a `BUY`.
+6. Review the fetched price on the confirmation step.
+7. Save the trade.
+8. Open trade history to show the saved row.
+9. Open the portfolio page to show updated holdings, gain/loss metrics, and charts.
+10. Open the watchlist to show saved tickers.
+11. Open Django admin to show the raw data in the database.
 
 ## Tech Used
 
