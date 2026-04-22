@@ -15,13 +15,33 @@
         <a href="{% url 'login' %}">Log In</a>
     </p>
 
-    {% if form.errors %}
-        <p class="message message-error">Please fix the errors below and try again.</p>
-    {% endif %}
-
     <form method="post">
         {% csrf_token %}
-        {{ form.as_p }}
+
+        <p>
+            {{ form.username.label_tag }}
+            {{ form.username }}
+            {% for error in form.username.errors %}
+                <br><span class="field-error">{{ error }}</span>
+            {% endfor %}
+        </p>
+
+        <p>
+            {{ form.password1.label_tag }}
+            {{ form.password1 }}
+            {% for error in form.password1.errors %}
+                <br><span class="field-error">{{ error }}</span>
+            {% endfor %}
+        </p>
+
+        <p>
+            {{ form.password2.label_tag }}
+            {{ form.password2 }}
+            {% for error in form.password2.errors %}
+                <br><span class="field-error">{{ error }}</span>
+            {% endfor %}
+        </p>
+
         <button type="submit">Create Account</button>
     </form>
 </body>

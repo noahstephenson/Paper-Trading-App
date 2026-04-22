@@ -164,6 +164,13 @@ tbody tr:hover {
     border: 1px solid #efc1c1;
 }
 
+.field-error {
+    color: #c0392b;
+    font-size: 0.875rem;
+    margin-top: 4px;
+    display: inline-block;
+}
+
 .confirm-box {
     margin: 16px 0;
     padding: 16px;

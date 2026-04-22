@@ -1,8 +1,9 @@
 from decimal import Decimal, InvalidOperation
 
-from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
+
+from .forms import RegistrationForm
 import plotly.graph_objects as go
 import yfinance as yf
 
@@ -237,13 +238,13 @@ def register(request):
         return redirect('trading:index')
 
     if request.method == 'POST':
-        form = UserCreationForm(data=request.POST)
+        form = RegistrationForm(data=request.POST)
 
         if form.is_valid():
             form.save()
             return redirect('/accounts/login/?registered=1')
     else:
-        form = UserCreationForm()
+        form = RegistrationForm()
 
     return render(request, 'registration/register.html', {
         'form': form,
