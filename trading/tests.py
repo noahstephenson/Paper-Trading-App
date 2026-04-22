@@ -828,3 +828,132 @@ def test_full_register_login_and_portfolio_flow(client):
     portfolio = client.get('/portfolio/')
     assert portfolio.status_code == 200
     assert 'No holdings to show yet.' in portfolio.content.decode()
+
+
+# ── New tests: 5 requested scenarios ─────────────────────────────────────────
+# These expand coverage for: valid buy, oversell, invalid ticker on trade form,
+# unauthenticated redirects, and the two-step confirmation flow.
+
+
+# (1) Buying a valid ticker ────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_buy_valid_ticker_appears_in_trade_history(auth_client, user):
+    """After a confirmed buy, the trade should appear in the history view with correct values."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '3'})
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+
+    response = auth_client.get('/trades/')
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'AAPL' in body
+    assert 'BUY' in body
+    assert '$100.00' in body
+    assert '$300.00' in body   # 3 shares × $100 total
+
+
+# (2) Selling more shares than owned ──────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_oversell_blocked_at_confirm_step(auth_client, user):
+    """If shares are sold between review and confirm, the confirm step should also block the oversell."""
+    # User buys 2 shares
+    Trade.objects.create(user=user, ticker='AAPL', trade_type='BUY', quantity=2, price=Decimal('100.00'))
+
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        # Review a sell of 2 — valid at this moment, so pending_trade is stored in session
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'SELL', 'quantity': '2'})
+
+    # Simulate those shares disappearing before the user clicks Confirm
+    Trade.objects.create(user=user, ticker='AAPL', trade_type='SELL', quantity=2, price=Decimal('100.00'))
+
+    # Confirm should now fail: 0 shares owned, pending trade wants to sell 2
+    response = auth_client.post('/trade/new/', {'form_action': 'confirm'})
+
+    assert response.status_code == 200
+    assert 'You cannot sell more shares than you currently own.' in response.content.decode()
+    # Only the manually created SELL exists — the pending one was not saved
+    assert Trade.objects.filter(trade_type='SELL').count() == 1
+
+
+# (3) Invalid ticker on the trade form ────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_invalid_ticker_on_trade_form_shows_error(auth_client):
+    """A ticker with no yfinance data should show a clear error on the trade form, not crash."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame()   # empty = no data
+        response = auth_client.post('/trade/new/', {
+            'ticker': 'ZZZZ', 'trade_type': 'BUY', 'quantity': '1',
+        })
+
+    assert response.status_code == 200
+    assert 'Could not fetch a current price for that ticker.' in response.content.decode()
+    assert Trade.objects.count() == 0
+
+
+# (4) Unauthenticated redirects include ?next= ────────────────────────────────
+
+@pytest.mark.django_db
+def test_unauthenticated_redirects_include_next_url(client):
+    """Login redirects must carry ?next= so the user lands on the right page after logging in."""
+    for url in ['/portfolio/', '/trade/new/', '/trades/']:
+        response = client.get(url)
+        assert response.status_code == 302
+        assert '/accounts/login/' in response.url
+        assert f'next={url}' in response.url
+
+
+# (5) Two-step confirmation flow ──────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_get_request_to_trade_form_clears_stale_pending_trade(auth_client):
+    """A GET to the trade form should clear any pending trade so old sessions can't be confirmed."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        # Create a pending trade in the session via POST
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '2'})
+
+    # GET request should wipe the pending trade
+    auth_client.get('/trade/new/')
+
+    # Confirm should now fail — session has been cleared
+    response = auth_client.post('/trade/new/', {'form_action': 'confirm'})
+
+    assert response.status_code == 200
+    assert 'Please submit the trade again before confirming it.' in response.content.decode()
+    assert Trade.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_sell_owned_shares_completes_two_step_flow(auth_client, user):
+    """A user with shares should complete the full review → confirm sell flow successfully."""
+    Trade.objects.create(user=user, ticker='TSLA', trade_type='BUY', quantity=5, price=Decimal('200.00'))
+
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [220.00]})
+        # Step 1: review
+        review = auth_client.post('/trade/new/', {
+            'ticker': 'TSLA', 'trade_type': 'SELL', 'quantity': '3',
+        })
+        assert response_contains_all(review, ['Confirm Trade', '$220.00', '$660.00'])
+
+        # Step 2: confirm
+        confirm = auth_client.post('/trade/new/', {'form_action': 'confirm'}, follow=True)
+
+    assert confirm.status_code == 200
+    assert Trade.objects.filter(trade_type='SELL').count() == 1
+    sell = Trade.objects.get(trade_type='SELL')
+    assert sell.ticker == 'TSLA'
+    assert sell.quantity == 3
+    assert sell.price == Decimal('220.00')
+
+
+def response_contains_all(response, strings):
+    """Helper: return True if all strings appear in the response body."""
+    body = response.content.decode()
+    return all(s in body for s in strings)
