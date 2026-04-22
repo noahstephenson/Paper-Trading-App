@@ -50,6 +50,11 @@
                     <td>${{ item.running_cash|floatformat:2 }}</td>
                     <td>{{ item.trade.created_at|date:"M j, Y g:i a" }}</td>
                 </tr>
+                {% if item.trade.notes %}
+                <tr>
+                    <td colspan="8" class="trade-notes">{{ item.trade.notes }}</td>
+                </tr>
+                {% endif %}
             {% endfor %}
         </tbody>
     </table>

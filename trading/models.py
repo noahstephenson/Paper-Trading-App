@@ -26,6 +26,8 @@ class Trade(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     # Save when the trade was created.
     created_at = models.DateTimeField(auto_now_add=True)
+    # Optional note explaining the trader's reasoning.
+    notes = models.TextField(blank=True, default="")
 
     @property
     def total(self):

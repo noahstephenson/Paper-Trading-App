@@ -82,11 +82,18 @@ label {
 
 input,
 select,
-button {
+button,
+textarea {
     padding: 8px 10px;
     font: inherit;
     border: 1px solid #c7ced6;
     border-radius: 4px;
+}
+
+textarea {
+    width: 100%;
+    resize: vertical;
+    box-sizing: border-box;
 }
 
 input,
@@ -312,3 +319,5 @@ td a {
     width: 140px;
     background-color: #f7fafd;
 }
+
+.trade-notes { font-size: 0.85em; color: #666; padding: 2px 8px 6px; font-style: italic; }

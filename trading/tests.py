@@ -957,3 +957,62 @@ def response_contains_all(response, strings):
     """Helper: return True if all strings appear in the response body."""
     body = response.content.decode()
     return all(s in body for s in strings)
+
+
+# ── Trade Rationale Journal ────────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+def test_trade_notes_saved_through_two_step_flow(auth_client):
+    """Notes entered on the trade form should be saved to the Trade record."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+        auth_client.post('/trade/new/', {
+            'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '1',
+            'notes': 'Strong earnings, bullish on AI segment.',
+        })
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+
+    trade = Trade.objects.get(ticker='AAPL')
+    assert trade.notes == 'Strong earnings, bullish on AI segment.'
+
+
+@pytest.mark.django_db
+def test_trade_without_notes_still_works(auth_client):
+    """Omitting the notes field should not break the trade flow; notes should be empty."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+        auth_client.post('/trade/new/', {
+            'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '1',
+        })
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+
+    trade = Trade.objects.get(ticker='AAPL')
+    assert trade.notes == ''
+
+
+@pytest.mark.django_db
+def test_notes_appear_in_trade_history(auth_client, user):
+    """A trade saved with notes should display those notes on the history page."""
+    Trade.objects.create(
+        user=user, ticker='MSFT', trade_type='BUY',
+        quantity=2, price=Decimal('300.00'),
+        notes='Cloud growth looks solid this quarter.',
+    )
+    response = auth_client.get('/trades/')
+    assert b'Cloud growth looks solid this quarter.' in response.content
+
+
+@pytest.mark.django_db
+def test_notes_over_500_chars_rejected(auth_client):
+    """Submitting notes longer than 500 characters should return a form error."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+        response = auth_client.post('/trade/new/', {
+            'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '1',
+            'notes': 'x' * 501,
+        })
+
+    assert response.status_code == 200
+    assert b'500 characters' in response.content
+    assert Trade.objects.count() == 0

@@ -27,6 +27,14 @@
         <input type="number" id="quantity" name="quantity" value="{{ quantity }}" min="1">
     </div>
 
+    <div class="form-group">
+        <label for="notes">Why are you making this trade? (optional)</label>
+        <textarea id="notes" name="notes" rows="3" maxlength="500"
+                  placeholder="Optional — what's your thesis? (e.g., 'Strong Q3 earnings, bullish on AI segment')"
+        >{{ notes }}</textarea>
+        {% if notes_error %}<span class="field-error">{{ notes_error }}</span>{% endif %}
+    </div>
+
     <button type="submit">Review Trade</button>
 </form>
 
@@ -52,6 +60,9 @@
             <tr><th>Price / Share</th><td>${{ quoted_price|floatformat:2 }}</td></tr>
             <tr><th>Estimated Total</th><td>${{ estimated_total|floatformat:2 }}</td></tr>
         </table>
+        {% if notes %}
+        <p style="margin-top: 10px;"><strong>Your thesis:</strong> {{ notes }}</p>
+        {% endif %}
         <form method="post" style="margin-top: 12px; border: none; padding: 0; background: none;">
             {% csrf_token %}
             <button type="submit" name="form_action" value="confirm">Confirm &amp; Save Trade</button>

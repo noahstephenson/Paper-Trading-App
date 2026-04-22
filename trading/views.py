@@ -418,8 +418,10 @@ def create_trade(request):
     ticker_prefilled = bool(ticker)
     trade_type = 'BUY'
     quantity = ''
+    notes = ''
     success_message = request.session.pop('trade_success_message', None)
     error_message = None
+    notes_error = None
     confirm_trade = False
     quoted_price = None
     estimated_total = None
@@ -439,6 +441,7 @@ def create_trade(request):
                 ticker = pending_trade.get('ticker', '')
                 trade_type = pending_trade.get('trade_type', 'BUY')
                 quantity = str(pending_trade.get('quantity', ''))
+                notes = pending_trade.get('notes', '')
 
                 try:
                     quantity_value = int(quantity)
@@ -470,6 +473,7 @@ def create_trade(request):
                             trade_type=trade_type,
                             quantity=quantity_value,
                             price=price_value,
+                            notes=notes,
                         )
                         trade_total = quantity_value * price_value
                         request.session.pop('pending_trade', None)
@@ -483,8 +487,12 @@ def create_trade(request):
             ticker = request.POST.get('ticker', '').strip().upper()
             trade_type = request.POST.get('trade_type', 'BUY')
             quantity = request.POST.get('quantity', '').strip()
+            notes = request.POST.get('notes', '').strip()
 
-            if ticker and trade_type and quantity:
+            if len(notes) > 500:
+                notes_error = 'Notes must be 500 characters or fewer.'
+
+            if ticker and trade_type and quantity and not notes_error:
                 if trade_type not in VALID_TRADE_TYPES:
                     error_message = 'Choose a valid trade type.'
                 else:
@@ -520,6 +528,7 @@ def create_trade(request):
                                         'trade_type': trade_type,
                                         'quantity': quantity_value,
                                         'quoted_price': str(quoted_price),
+                                        'notes': notes,
                                     }
                         else:
                             error_message = 'Quantity must be greater than zero.'
@@ -533,6 +542,8 @@ def create_trade(request):
         'ticker_prefilled': ticker_prefilled,
         'trade_type': trade_type,
         'quantity': quantity,
+        'notes': notes,
+        'notes_error': notes_error,
         'success_message': success_message,
         'error_message': error_message,
         'confirm_trade': confirm_trade,
@@ -706,11 +717,19 @@ def portfolio(request):
 @login_required
 def watchlist(request):
     """Show the user's watchlist and allow adding tickers."""
+    error_message = None
+
     if request.method == 'POST':
         ticker = request.POST.get('ticker', '').strip().upper()
         if ticker:
-            WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
-        return redirect('trading:watchlist')
+            price = fetch_latest_price(ticker)
+            if price is None:
+                error_message = f'"{ticker}" is not a recognised ticker symbol.'
+            else:
+                WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
+                return redirect('trading:watchlist')
+        else:
+            return redirect('trading:watchlist')
 
     items = WatchlistItem.objects.filter(user=request.user).order_by('ticker')
     enriched = []
@@ -718,7 +737,7 @@ def watchlist(request):
         price = fetch_latest_price(item.ticker)
         enriched.append({'ticker': item.ticker, 'price': price, 'added_at': item.added_at})
 
-    return render(request, 'trading/watchlist.html', {'watchlist': enriched})
+    return render(request, 'trading/watchlist.html', {'watchlist': enriched, 'error_message': error_message})
 
 
 @login_required
