@@ -1,4 +1,8 @@
 asgiref==3.11.1
+dj-database-url==2.3.0
+gunicorn==23.0.0
+python-decouple==3.8
+whitenoise==6.9.0
 beautifulsoup4==4.14.3
 certifi==2026.2.25
 cffi==2.0.0
