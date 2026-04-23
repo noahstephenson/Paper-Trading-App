@@ -10,14 +10,15 @@ Plus integration-level view tests for every major user flow.
 
 from decimal import Decimal
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
 
-from .models import Trade, UserProfile, WatchlistItem
+from .models import Trade, UserProfile, WatchlistItem, CoachAnalysis
 from .views import fetch_latest_price, get_trade_balances
+from .services.ai_coach import build_portfolio_context, get_coach_analysis
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -1143,3 +1144,119 @@ def test_watchlist_rejects_ticker_too_long(auth_client, user):
     assert response.status_code == 200
     assert '10 characters' in response.content.decode()
     assert WatchlistItem.objects.filter(user=user).count() == 0
+
+
+# ── AI Coach Tests ────────────────────────────────────────────────────────────
+
+@pytest.mark.django_db
+@patch('trading.services.ai_coach.yf.Ticker')
+def test_build_portfolio_context_correct_structure(mock_ticker, user):
+    """build_portfolio_context returns all expected keys and correct holding count."""
+    mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+    Trade.objects.create(user=user, ticker='AAPL', trade_type='BUY', quantity=5, price=Decimal('100.00'))
+
+    ctx = build_portfolio_context(user)
+
+    assert 'cash_balance' in ctx
+    assert 'starting_balance' in ctx
+    assert 'total_portfolio_value' in ctx
+    assert 'total_return_pct' in ctx
+    assert 'holdings' in ctx
+    assert 'recent_trades' in ctx
+    assert 'trade_count_total' in ctx
+    assert 'trade_count_30d' in ctx
+    assert 'concentration' in ctx
+    assert ctx['trade_count_total'] == 1
+    assert len(ctx['holdings']) == 1
+    assert ctx['holdings'][0]['ticker'] == 'AAPL'
+
+
+@pytest.mark.django_db
+def test_build_portfolio_context_empty_user(user):
+    """build_portfolio_context handles a user with no trades gracefully."""
+    ctx = build_portfolio_context(user)
+
+    assert ctx['trade_count_total'] == 0
+    assert ctx['holdings'] == []
+    assert ctx['recent_trades'] == []
+    assert ctx['concentration'] == 0.0
+
+
+@pytest.mark.django_db
+@patch('trading.services.ai_coach.yf.Ticker')
+@patch('trading.services.ai_coach.anthropic.Anthropic')
+def test_get_coach_analysis_saves_row_on_success(mock_anthropic_class, mock_ticker, user):
+    """get_coach_analysis saves a CoachAnalysis row when the API call succeeds."""
+    mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+    mock_message = MagicMock()
+    mock_message.content = [MagicMock(text="Good diversification. Watch your cash. What is your goal?")]
+    mock_anthropic_class.return_value.messages.create.return_value = mock_message
+
+    with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key-123'}):
+        result = get_coach_analysis(user)
+
+    assert CoachAnalysis.objects.filter(user=user).count() == 1
+    saved = CoachAnalysis.objects.get(user=user)
+    assert 'Good diversification' in saved.analysis_text
+    assert 'Good diversification' in result
+
+
+@pytest.mark.django_db
+@patch('trading.services.ai_coach.yf.Ticker')
+@patch('trading.services.ai_coach.anthropic.Anthropic')
+def test_get_coach_analysis_api_failure_no_row_saved(mock_anthropic_class, mock_ticker, user):
+    """get_coach_analysis returns a fallback string and saves nothing when the API raises."""
+    mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [150.00]})
+    mock_anthropic_class.return_value.messages.create.side_effect = Exception("Network error")
+
+    with patch.dict('os.environ', {'ANTHROPIC_API_KEY': 'test-key-123'}):
+        result = get_coach_analysis(user)
+
+    assert CoachAnalysis.objects.filter(user=user).count() == 0
+    assert isinstance(result, str)
+    assert len(result) > 0
+
+
+@pytest.mark.django_db
+def test_coach_view_get_renders(auth_client):
+    """GET /portfolio/coach/ returns 200 and shows the page heading."""
+    response = auth_client.get('/portfolio/coach/')
+    assert response.status_code == 200
+    assert 'AI Trading Coach' in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch('trading.views.get_coach_analysis')
+def test_coach_view_post_triggers_analysis(mock_get_analysis, auth_client):
+    """POST /portfolio/coach/ calls get_coach_analysis and redirects."""
+    mock_get_analysis.return_value = "Test analysis."
+
+    response = auth_client.post('/portfolio/coach/')
+
+    assert response.status_code == 302
+    mock_get_analysis.assert_called_once()
+
+
+@pytest.mark.django_db
+@patch('trading.views.get_coach_analysis')
+def test_coach_view_rate_limit_blocks_second_post(mock_get_analysis, auth_client, user):
+    """A second POST within 60 seconds is blocked with a wait message."""
+    mock_get_analysis.return_value = "Analysis."
+    CoachAnalysis.objects.create(user=user, portfolio_snapshot={}, analysis_text="Previous analysis.")
+
+    response = auth_client.post('/portfolio/coach/', follow=True)
+
+    mock_get_analysis.assert_not_called()
+    assert 'Please wait' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_missing_api_key_returns_friendly_message(user, monkeypatch):
+    """get_coach_analysis returns a friendly string and saves nothing when ANTHROPIC_API_KEY is unset."""
+    monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
+
+    result = get_coach_analysis(user)
+
+    assert isinstance(result, str)
+    assert len(result) > 0
+    assert CoachAnalysis.objects.filter(user=user).count() == 0

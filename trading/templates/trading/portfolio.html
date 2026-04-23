@@ -40,6 +40,33 @@
     </div>
 </div>
 
+<div class="summary-card" style="margin:16px 0; padding:16px; border-left:4px solid #4a9eff;">
+  <strong>AI Trading Coach</strong>
+  {% if latest_analysis %}
+    <div style="margin-top:8px;">{{ latest_analysis.analysis_text|linebreaks }}</div>
+    <small style="color:#888;">{{ latest_analysis.created_at|date:"M j, Y g:i a" }}</small>
+    <div style="margin-top:8px;">
+      <form method="post" action="{% url 'trading:coach_analysis' %}">
+        {% csrf_token %}
+        <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
+          Refresh Analysis
+        </button>
+      </form>
+    </div>
+  {% else %}
+    <p style="margin:8px 0;">Get personalized coaching feedback on your portfolio.</p>
+    <form method="post" action="{% url 'trading:coach_analysis' %}">
+      {% csrf_token %}
+      <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
+        Get First Analysis
+      </button>
+    </form>
+  {% endif %}
+  <p style="color:#888; font-size:0.85em; margin-top:8px;">
+    AI-generated educational feedback. Not financial advice.
+  </p>
+</div>
+
 {% if allocation_chart %}
     <div class="chart-row">
         <div class="chart-box">{{ allocation_chart|safe }}</div>

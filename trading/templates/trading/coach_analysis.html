@@ -1,0 +1,33 @@
+{% extends "trading/base.html" %}
+
+{% block title %}AI Trading Coach{% endblock %}
+
+{% block content %}
+<h1>AI Trading Coach</h1>
+
+{% if messages %}
+  {% for message in messages %}
+    <p class="message message-warning">{{ message }}</p>
+  {% endfor %}
+{% endif %}
+
+{% if latest_analysis %}
+  <div class="summary-card" style="margin-bottom:16px; padding:16px;">
+    <div>{{ latest_analysis.analysis_text|linebreaks }}</div>
+    <small style="color:#888;">Generated {{ latest_analysis.created_at|date:"M j, Y g:i a" }}</small>
+  </div>
+{% else %}
+  <p>No analysis yet. Click below to get your first coaching feedback.</p>
+{% endif %}
+
+<form method="post">
+  {% csrf_token %}
+  <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
+    {% if latest_analysis %}Refresh Analysis{% else %}Get My Analysis{% endif %}
+  </button>
+</form>
+
+<p style="color:#888; font-size:0.85em; margin-top:12px;">
+  AI-generated educational feedback. Not financial advice.
+</p>
+{% endblock %}

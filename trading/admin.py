@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Trade, UserProfile
+from .models import Trade, UserProfile, CoachAnalysis
 
 
 @admin.register(Trade)
@@ -19,3 +19,13 @@ class TradeAdmin(admin.ModelAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'cash_balance', 'starting_balance')
     search_fields = ('user__username',)
+
+
+@admin.register(CoachAnalysis)
+class CoachAnalysisAdmin(admin.ModelAdmin):
+    list_display = ('user', 'created_at', 'analysis_preview')
+    readonly_fields = ('user', 'created_at', 'portfolio_snapshot', 'analysis_text')
+
+    def analysis_preview(self, obj):
+        return obj.analysis_text[:100] + '…' if len(obj.analysis_text) > 100 else obj.analysis_text
+    analysis_preview.short_description = 'Preview'

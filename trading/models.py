@@ -63,3 +63,16 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} profile"
+
+
+class CoachAnalysis(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    created_at = models.DateTimeField(auto_now_add=True)
+    portfolio_snapshot = models.JSONField()
+    analysis_text = models.TextField()
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Analysis for {self.user.username} at {self.created_at}"

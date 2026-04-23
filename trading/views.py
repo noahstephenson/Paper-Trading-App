@@ -1,14 +1,18 @@
 from decimal import Decimal, InvalidOperation
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from .forms import RegistrationForm
 import plotly.graph_objects as go
 import yfinance as yf
 
-from .models import Trade, UserProfile, WatchlistItem
+from .models import Trade, UserProfile, WatchlistItem, CoachAnalysis
+from .services.portfolio import compute_trade_state
+from .services.ai_coach import get_coach_analysis
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
 STARTING_CASH = Decimal('100000.00')
@@ -49,60 +53,6 @@ def get_trade_balances(user, ticker, starting_cash):
     return cash_balance, current_shares
 
 
-def compute_trade_state(trades, starting_cash=STARTING_CASH):
-    """
-    Process trades in chronological order and compute full account state.
-
-    Returns:
-        holdings: {ticker: {shares, avg_cost, realized_gain}} — only tickers with shares > 0
-        annotated_trades: [{trade, running_cash, realized_gain}] — chronological order
-        cash_balance: Decimal final cash
-        total_realized_gain: Decimal sum of all realized gains
-    """
-    cash = starting_cash
-    state = {}    # ticker → {shares: int, total_cost: Decimal}
-    realized = {} # ticker → Decimal
-    annotated = []
-
-    for trade in sorted(trades, key=lambda t: t.created_at):
-        ticker = trade.ticker
-        qty = trade.quantity
-        price = trade.price
-
-        if ticker not in state:
-            state[ticker] = {'shares': 0, 'total_cost': Decimal('0.00')}
-
-        t_realized = None
-        if trade.trade_type == Trade.BUY:
-            state[ticker]['shares'] += qty
-            state[ticker]['total_cost'] += qty * price
-            cash -= qty * price
-        else:  # SELL
-            s = state[ticker]
-            avg = s['total_cost'] / Decimal(s['shares']) if s['shares'] > 0 else price
-            t_realized = Decimal(qty) * (price - avg)
-            s['total_cost'] -= avg * qty
-            s['shares'] -= qty
-            realized[ticker] = realized.get(ticker, Decimal('0.00')) + t_realized
-            cash += qty * price
-
-        annotated.append({
-            'trade': trade,
-            'running_cash': cash,
-            'realized_gain': t_realized,
-        })
-
-    holdings = {}
-    for ticker, s in state.items():
-        if s['shares'] > 0:
-            holdings[ticker] = {
-                'shares': s['shares'],
-                'avg_cost': s['total_cost'] / Decimal(s['shares']),
-                'realized_gain': realized.get(ticker, Decimal('0.00')),
-            }
-
-    total_realized = sum(realized.values(), Decimal('0.00'))
-    return holdings, annotated, cash, total_realized
 
 
 def build_portfolio_history(trades, starting_cash=STARTING_CASH):
@@ -730,6 +680,8 @@ def portfolio(request):
     except Exception:
         portfolio_history_chart = None
 
+    latest_analysis = CoachAnalysis.objects.filter(user=request.user).first()
+
     return render(request, 'trading/portfolio.html', {
         'portfolio_rows': portfolio_rows,
         'starting_cash': starting_cash,
@@ -742,6 +694,7 @@ def portfolio(request):
         'allocation_chart': allocation_chart,
         'cost_vs_value_chart': cost_vs_value_chart,
         'portfolio_history_chart': portfolio_history_chart,
+        'latest_analysis': latest_analysis,
     })
 
 
@@ -780,6 +733,23 @@ def remove_from_watchlist(request, ticker):
     if request.method == 'POST':
         WatchlistItem.objects.filter(user=request.user, ticker=ticker.upper()).delete()
     return redirect('trading:watchlist')
+
+
+@login_required
+def coach_analysis_view(request):
+    if request.method == 'POST':
+        latest = CoachAnalysis.objects.filter(user=request.user).first()
+        if latest:
+            elapsed = (timezone.now() - latest.created_at).total_seconds()
+            if elapsed < 60:
+                wait = int(60 - elapsed)
+                messages.warning(request, f"Please wait {wait} more seconds before refreshing your analysis.")
+                return redirect('trading:coach_analysis')
+        get_coach_analysis(request.user)
+        return redirect('trading:coach_analysis')
+
+    latest_analysis = CoachAnalysis.objects.filter(user=request.user).first()
+    return render(request, 'trading/coach_analysis.html', {'latest_analysis': latest_analysis})
 
 
 @login_required
