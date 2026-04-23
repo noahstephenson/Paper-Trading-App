@@ -40,6 +40,10 @@
         <strong>Day Low</strong>
         <div>${{ stock_details.day_low|floatformat:2 }}</div>
     </div>
+    <div class="summary-card">
+        <strong>Cash Available</strong>
+        <div>${{ cash_balance|floatformat:2 }}</div>
+    </div>
     {% if shares_owned > 0 %}
     <div class="summary-card">
         <strong>Shares You Own</strong>

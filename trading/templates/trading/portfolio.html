@@ -32,6 +32,12 @@
             ${{ total_realized_gain|floatformat:2 }}
         </div>
     </div>
+    <div class="summary-card">
+        <strong>Total Return</strong>
+        <div class="{% if total_return_percent >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+            {{ total_return_percent|floatformat:2 }}%
+        </div>
+    </div>
 </div>
 
 {% if allocation_chart %}

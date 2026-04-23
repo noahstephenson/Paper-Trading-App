@@ -6,6 +6,8 @@
 <h1>Enter a Paper Trade</h1>
 <p>Submit the form to fetch the current market price and review before saving.</p>
 
+<p class="cash-info">Available Cash: ${{ cash_balance|floatformat:2 }}</p>
+
 <form method="post">
     {% csrf_token %}
 

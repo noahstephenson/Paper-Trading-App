@@ -16,7 +16,7 @@ import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
 
-from .models import Trade, WatchlistItem
+from .models import Trade, UserProfile, WatchlistItem
 from .views import fetch_latest_price, get_trade_balances
 
 
@@ -418,7 +418,8 @@ def test_oversell_is_blocked(auth_client, user):
 @pytest.mark.django_db
 def test_buy_is_blocked_when_cash_is_too_low(auth_client, user):
     """The app should block buys that cost more than the cash balance."""
-    Trade.objects.create(user=user, ticker='AAPL', trade_type='BUY', quantity=90, price=Decimal('100.00'))
+    user.profile.cash_balance = Decimal('1000.00')
+    user.profile.save()
     with patch('trading.views.yf.Ticker') as mock_ticker:
         mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [200.00]})
         response = auth_client.post('/trade/new/', {
@@ -426,7 +427,7 @@ def test_buy_is_blocked_when_cash_is_too_low(auth_client, user):
         })
 
     assert response.status_code == 200
-    assert 'You do not have enough cash to make that purchase.' in response.content.decode()
+    assert 'Insufficient funds' in response.content.decode()
     assert Trade.objects.filter(ticker='NVDA').count() == 0
 
 
@@ -1016,3 +1017,129 @@ def test_notes_over_500_chars_rejected(auth_client):
     assert response.status_code == 200
     assert b'500 characters' in response.content
     assert Trade.objects.count() == 0
+
+
+# ── UserProfile / Cash Balance ────────────────────────────────────────────────
+
+@pytest.mark.django_db
+def test_registration_creates_user_profile(client):
+    """Registering a new user should auto-create a UserProfile with $100,000 starting cash."""
+    client.post('/accounts/register/', {
+        'username': 'newtrader99',
+        'password1': 'StrongPass123!',
+        'password2': 'StrongPass123!',
+    })
+    new_user = get_user_model().objects.get(username='newtrader99')
+    assert hasattr(new_user, 'profile')
+    assert new_user.profile.cash_balance == Decimal('100000.00')
+    assert new_user.profile.starting_balance == Decimal('100000.00')
+
+
+@pytest.mark.django_db
+def test_buy_decrements_cash_balance(auth_client, user):
+    """Completing a buy through the full view flow should reduce profile.cash_balance."""
+    initial_cash = user.profile.cash_balance
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '5'})
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+    user.profile.refresh_from_db()
+    assert user.profile.cash_balance == initial_cash - Decimal('500.00')
+
+
+@pytest.mark.django_db
+def test_sell_increments_cash_balance(auth_client, user):
+    """Completing a sell through the full view flow should increase profile.cash_balance."""
+    Trade.objects.create(user=user, ticker='AAPL', trade_type='BUY', quantity=10, price=Decimal('100.00'))
+    user.profile.cash_balance = Decimal('99000.00')
+    user.profile.save()
+    initial_cash = user.profile.cash_balance
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [120.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'SELL', 'quantity': '5'})
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+    user.profile.refresh_from_db()
+    assert user.profile.cash_balance == initial_cash + Decimal('600.00')
+
+
+@pytest.mark.django_db
+def test_buy_blocked_insufficient_cash_at_review(auth_client, user):
+    """A buy should be blocked at the review step if the user's profile cash is too low."""
+    user.profile.cash_balance = Decimal('500.00')
+    user.profile.save()
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        response = auth_client.post('/trade/new/', {
+            'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '10',
+        })
+    assert response.status_code == 200
+    assert 'Insufficient funds' in response.content.decode()
+    assert Trade.objects.filter(user=user).count() == 0
+
+
+@pytest.mark.django_db
+def test_buy_blocked_insufficient_cash_at_confirm(auth_client, user):
+    """A buy should be blocked at the confirm step if cash was depleted after the review step."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '5'})
+    user.profile.cash_balance = Decimal('0.00')
+    user.profile.save()
+    response = auth_client.post('/trade/new/', {'form_action': 'confirm'})
+    assert response.status_code == 200
+    assert 'Insufficient funds' in response.content.decode()
+    assert Trade.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_portfolio_displays_cash_balance(auth_client, user):
+    """The portfolio page should show the cash balance from the user's profile."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '1'})
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+    user.profile.refresh_from_db()
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        response = auth_client.get('/portfolio/')
+    assert response.status_code == 200
+    # $100,000 - $100 = $99,900 shown as 99900.00 by floatformat:2
+    assert '99900.00' in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_oversell_still_blocked_after_profile_changes(auth_client, user):
+    """Share ownership validation should still block oversells regardless of cash balance changes."""
+    Trade.objects.create(user=user, ticker='AAPL', trade_type='BUY', quantity=2, price=Decimal('100.00'))
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        response = auth_client.post('/trade/new/', {
+            'ticker': 'AAPL', 'trade_type': 'SELL', 'quantity': '5',
+        })
+    assert response.status_code == 200
+    assert 'You cannot sell more shares than you currently own.' in response.content.decode()
+    assert Trade.objects.filter(trade_type='SELL').count() == 0
+
+
+@pytest.mark.django_db
+def test_clear_trades_resets_cash_balance(auth_client, user):
+    """Clearing trades should reset profile.cash_balance back to starting_balance."""
+    with patch('trading.views.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.history.return_value = pd.DataFrame({'Close': [100.00]})
+        auth_client.post('/trade/new/', {'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '5'})
+        auth_client.post('/trade/new/', {'form_action': 'confirm'})
+    user.profile.refresh_from_db()
+    assert user.profile.cash_balance < user.profile.starting_balance
+
+    auth_client.post('/demo/clear/')
+    user.profile.refresh_from_db()
+    assert user.profile.cash_balance == user.profile.starting_balance
+
+
+@pytest.mark.django_db
+def test_watchlist_rejects_ticker_too_long(auth_client, user):
+    """A ticker longer than 10 characters should show a clear error message."""
+    response = auth_client.post('/watchlist/', {'ticker': 'TOOLONGTICKER'})
+    assert response.status_code == 200
+    assert '10 characters' in response.content.decode()
+    assert WatchlistItem.objects.filter(user=user).count() == 0

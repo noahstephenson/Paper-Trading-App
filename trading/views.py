@@ -1,16 +1,17 @@
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.shortcuts import redirect, render
 
 from .forms import RegistrationForm
 import plotly.graph_objects as go
 import yfinance as yf
 
-from .models import Trade, WatchlistItem
+from .models import Trade, UserProfile, WatchlistItem
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
-STARTING_CASH = Decimal('10000.00')
+STARTING_CASH = Decimal('100000.00')
 
 
 def fetch_latest_price(ticker):
@@ -48,7 +49,7 @@ def get_trade_balances(user, ticker, starting_cash):
     return cash_balance, current_shares
 
 
-def compute_trade_state(trades):
+def compute_trade_state(trades, starting_cash=STARTING_CASH):
     """
     Process trades in chronological order and compute full account state.
 
@@ -58,7 +59,7 @@ def compute_trade_state(trades):
         cash_balance: Decimal final cash
         total_realized_gain: Decimal sum of all realized gains
     """
-    cash = STARTING_CASH
+    cash = starting_cash
     state = {}    # ticker → {shares: int, total_cost: Decimal}
     realized = {} # ticker → Decimal
     annotated = []
@@ -104,7 +105,7 @@ def compute_trade_state(trades):
     return holdings, annotated, cash, total_realized
 
 
-def build_portfolio_history(trades):
+def build_portfolio_history(trades, starting_cash=STARTING_CASH):
     """
     Build a daily portfolio value series using trade history and yfinance price data.
     Returns (dates_list, values_list) for Plotly, or (None, None) if insufficient data.
@@ -140,7 +141,7 @@ def build_portfolio_history(trades):
     for ticker in price_histories:
         price_histories[ticker] = price_histories[ticker].reindex(all_dates).ffill()
 
-    cash = float(STARTING_CASH)
+    cash = float(starting_cash)
     state = {}
     trade_idx = 0
     chart_dates = []
@@ -186,7 +187,8 @@ def index(request):
         return render(request, 'trading/index.html', {})
 
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
-    holdings, _, cash_balance, realized_gain = compute_trade_state(trades)
+    holdings, _, _, realized_gain = compute_trade_state(trades)
+    cash_balance = request.user.profile.cash_balance
 
     total_holdings_value = Decimal('0.00')
     unrealized_gain = Decimal('0.00')
@@ -395,7 +397,8 @@ def stock_detail(request, ticker):
         error_message = 'Could not fetch stock data right now.'
 
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
-    holdings, _, cash_balance, _ = compute_trade_state(trades)
+    holdings, _, _, _ = compute_trade_state(trades)
+    cash_balance = request.user.profile.cash_balance
     shares_owned = holdings.get(ticker, {}).get('shares', 0)
 
     return render(request, 'trading/stock_detail.html', {
@@ -419,6 +422,7 @@ def create_trade(request):
     trade_type = 'BUY'
     quantity = ''
     notes = ''
+    cash_balance = request.user.profile.cash_balance
     success_message = request.session.pop('trade_success_message', None)
     error_message = None
     notes_error = None
@@ -454,7 +458,7 @@ def create_trade(request):
                     request.session.pop('pending_trade', None)
                     error_message = 'Could not confirm that trade. Please submit it again.'
                 else:
-                    cash_balance, current_shares = get_trade_balances(
+                    _, current_shares = get_trade_balances(
                         request.user,
                         ticker,
                         STARTING_CASH,
@@ -463,26 +467,38 @@ def create_trade(request):
                     if trade_type == Trade.SELL and quantity_value > current_shares:
                         request.session.pop('pending_trade', None)
                         error_message = 'You cannot sell more shares than you currently own.'
-                    elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
-                        request.session.pop('pending_trade', None)
-                        error_message = 'You do not have enough cash to make that purchase.'
                     else:
-                        Trade.objects.create(
-                            user=request.user,
-                            ticker=ticker,
-                            trade_type=trade_type,
-                            quantity=quantity_value,
-                            price=price_value,
-                            notes=notes,
-                        )
-                        trade_total = quantity_value * price_value
-                        request.session.pop('pending_trade', None)
-                        request.session['trade_success_message'] = (
-                            f'{trade_type} trade confirmed for {quantity_value} shares of '
-                            f'{ticker} at ${price_value:.2f} per share. '
-                            f'Estimated total: ${trade_total:.2f}.'
-                        )
-                        return redirect('trading:create_trade')
+                        with transaction.atomic():
+                            profile = UserProfile.objects.select_for_update().get(user=request.user)
+                            amount = quantity_value * price_value
+                            if trade_type == Trade.BUY and amount > profile.cash_balance:
+                                request.session.pop('pending_trade', None)
+                                error_message = (
+                                    f'Insufficient funds: this trade costs ${amount:,.2f} '
+                                    f'but you have ${profile.cash_balance:,.2f} available.'
+                                )
+                            else:
+                                if trade_type == Trade.BUY:
+                                    profile.cash_balance -= amount
+                                else:
+                                    profile.cash_balance += amount
+                                profile.save()
+                                Trade.objects.create(
+                                    user=request.user,
+                                    ticker=ticker,
+                                    trade_type=trade_type,
+                                    quantity=quantity_value,
+                                    price=price_value,
+                                    notes=notes,
+                                )
+                                trade_total = amount
+                                request.session.pop('pending_trade', None)
+                                request.session['trade_success_message'] = (
+                                    f'{trade_type} trade confirmed for {quantity_value} shares of '
+                                    f'{ticker} at ${price_value:.2f} per share. '
+                                    f'Estimated total: ${trade_total:.2f}.'
+                                )
+                                return redirect('trading:create_trade')
         else:
             ticker = request.POST.get('ticker', '').strip().upper()
             trade_type = request.POST.get('trade_type', 'BUY')
@@ -509,16 +525,21 @@ def create_trade(request):
                             if price_value is None and error_message is None:
                                 error_message = 'Could not fetch a current price for that ticker.'
                             elif price_value is not None:
-                                cash_balance, current_shares = get_trade_balances(
+                                _, current_shares = get_trade_balances(
                                     request.user,
                                     ticker,
                                     STARTING_CASH,
                                 )
+                                cash_balance = request.user.profile.cash_balance
+                                trade_cost = quantity_value * price_value
 
                                 if trade_type == Trade.SELL and quantity_value > current_shares:
                                     error_message = 'You cannot sell more shares than you currently own.'
-                                elif trade_type == Trade.BUY and (quantity_value * price_value) > cash_balance:
-                                    error_message = 'You do not have enough cash to make that purchase.'
+                                elif trade_type == Trade.BUY and trade_cost > cash_balance:
+                                    error_message = (
+                                        f'Insufficient funds: this trade costs ${trade_cost:,.2f} '
+                                        f'but you have ${cash_balance:,.2f} available.'
+                                    )
                                 else:
                                     quoted_price = price_value
                                     estimated_total = quantity_value * quoted_price
@@ -543,6 +564,7 @@ def create_trade(request):
         'trade_type': trade_type,
         'quantity': quantity,
         'notes': notes,
+        'cash_balance': cash_balance,
         'notes_error': notes_error,
         'success_message': success_message,
         'error_message': error_message,
@@ -556,7 +578,9 @@ def create_trade(request):
 def trade_history(request):
     """Show all saved trades with running cash balance and realized gain on sells."""
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
-    _, annotated_trades, _, total_realized_gain = compute_trade_state(trades)
+    _, annotated_trades, _, total_realized_gain = compute_trade_state(
+        trades, starting_cash=request.user.profile.starting_balance
+    )
     annotated_trades = list(reversed(annotated_trades))
 
     return render(request, 'trading/trade_history.html', {
@@ -570,8 +594,9 @@ def portfolio(request):
     """Show current holdings based on saved trades."""
     trades_cleared = request.GET.get('demo') == 'cleared'
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
+    starting_cash = request.user.profile.starting_balance
 
-    holdings, _, cash_balance, total_realized_gain = compute_trade_state(trades)
+    holdings, _, _, total_realized_gain = compute_trade_state(trades, starting_cash=starting_cash)
 
     total_holdings_value = Decimal('0.00')
     portfolio_rows = []
@@ -615,7 +640,12 @@ def portfolio(request):
             'realized_gain': realized_gain,
         })
 
+    cash_balance = request.user.profile.cash_balance
     total_account_value = cash_balance + total_holdings_value
+    if starting_cash > 0:
+        total_return_percent = (total_account_value - starting_cash) / starting_cash * 100
+    else:
+        total_return_percent = Decimal('0')
 
     priced_rows = [r for r in portfolio_rows if r['total_value'] is not None]
     allocation_chart = None
@@ -670,7 +700,7 @@ def portfolio(request):
 
     try:
         all_trades_list = list(trades)
-        hist_dates, hist_values = build_portfolio_history(all_trades_list)
+        hist_dates, hist_values = build_portfolio_history(all_trades_list, starting_cash=starting_cash)
         if hist_dates and hist_values:
             hist_fig = go.Figure()
             hist_fig.add_trace(go.Scatter(
@@ -683,7 +713,7 @@ def portfolio(request):
                 fillcolor='rgba(11,92,171,0.1)',
             ))
             hist_fig.add_hline(
-                y=float(STARTING_CASH),
+                y=float(starting_cash),
                 line_dash='dash',
                 line_color='#aaa',
                 annotation_text='Starting Cash',
@@ -702,11 +732,12 @@ def portfolio(request):
 
     return render(request, 'trading/portfolio.html', {
         'portfolio_rows': portfolio_rows,
-        'starting_cash': STARTING_CASH,
+        'starting_cash': starting_cash,
         'cash_balance': cash_balance,
         'total_holdings_value': total_holdings_value,
         'total_account_value': total_account_value,
         'total_realized_gain': total_realized_gain,
+        'total_return_percent': total_return_percent,
         'trades_cleared': trades_cleared,
         'allocation_chart': allocation_chart,
         'cost_vs_value_chart': cost_vs_value_chart,
@@ -722,12 +753,15 @@ def watchlist(request):
     if request.method == 'POST':
         ticker = request.POST.get('ticker', '').strip().upper()
         if ticker:
-            price = fetch_latest_price(ticker)
-            if price is None:
-                error_message = f'"{ticker}" is not a recognised ticker symbol.'
+            if len(ticker) > 10:
+                error_message = 'Ticker symbols must be 10 characters or fewer.'
             else:
-                WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
-                return redirect('trading:watchlist')
+                price = fetch_latest_price(ticker)
+                if price is None:
+                    error_message = f'"{ticker}" is not a recognised ticker symbol.'
+                else:
+                    WatchlistItem.objects.get_or_create(user=request.user, ticker=ticker)
+                    return redirect('trading:watchlist')
         else:
             return redirect('trading:watchlist')
 
@@ -753,6 +787,9 @@ def clear_trades(request):
     """Delete all trades so the app returns to an empty state."""
     if request.method == 'POST':
         Trade.objects.filter(user=request.user).delete()
+        profile = request.user.profile
+        profile.cash_balance = profile.starting_balance
+        profile.save()
         return redirect('/portfolio/?demo=cleared')
 
     return redirect('trading:index')

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Trade
+from .models import Trade, UserProfile
 
 
 @admin.register(Trade)
@@ -13,3 +13,9 @@ class TradeAdmin(admin.ModelAdmin):
     def short_notes(self, obj):
         return obj.notes[:60] + '…' if len(obj.notes) > 60 else obj.notes
     short_notes.short_description = 'Notes'
+
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'cash_balance', 'starting_balance')
+    search_fields = ('user__username',)
