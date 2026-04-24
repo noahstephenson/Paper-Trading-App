@@ -17,8 +17,7 @@ SYSTEM_PROMPT = """You are an educational trading coach reviewing a student's pa
 Rules:
 - Under 80 words total.
 - Note one strength and one concern you actually see in the data.
-- End with one short question for the student to reflect on.
-- Plain language only. No bullet points or headers. No financial advice."""
+- Plain language only. No bullet points or headers. No financial advice. No questions."""
 
 
 def build_portfolio_context(user):
