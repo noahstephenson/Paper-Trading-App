@@ -1,10 +1,10 @@
 import logging
-import os
 from datetime import timedelta
 from decimal import Decimal
 
 import anthropic
 import yfinance as yf
+from decouple import config
 from django.utils import timezone
 
 from ..models import Trade, CoachAnalysis
@@ -12,18 +12,13 @@ from .portfolio import compute_trade_state
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are an educational trading coach helping a student learn about investing through a paper trading simulation. You review portfolio data and provide concise, educational feedback.
+SYSTEM_PROMPT = """You are an educational trading coach reviewing a student's paper trading portfolio. Give brief, specific feedback based only on the data provided.
 
 Rules:
-- This is a learning tool, not real financial advice. Always treat it as educational.
-- Be specific to the data provided — no generic platitudes.
-- Identify 1-2 strengths and 1-2 concerns based on what you actually see.
-- Keep your response under 200 words total.
-- Use plain language — no finance jargon without explanation.
-- Do not recommend specific trades or predict prices. Comment on patterns you observe.
-- If the student has fewer than 3 trades, acknowledge they are just getting started.
-- End with exactly one reflective question for the student to think about.
-- Write in short paragraphs. No bullet points or headers."""
+- Under 80 words total.
+- Note one strength and one concern you actually see in the data.
+- End with one short question for the student to reflect on.
+- Plain language only. No bullet points or headers. No financial advice."""
 
 
 def build_portfolio_context(user):
@@ -131,7 +126,7 @@ def _format_portfolio_for_claude(ctx):
 
 
 def get_coach_analysis(user):
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    api_key = config("ANTHROPIC_API_KEY", default=None)
     if not api_key:
         return "The AI coach is not available yet. (API key not configured.)"
 
@@ -147,7 +142,7 @@ def get_coach_analysis(user):
         client = anthropic.Anthropic(api_key=api_key)
         message = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            max_tokens=300,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_message}],
         )

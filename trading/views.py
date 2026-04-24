@@ -543,6 +543,23 @@ def trade_history(request):
 def portfolio(request):
     """Show current holdings based on saved trades."""
     trades_cleared = request.GET.get('demo') == 'cleared'
+    coach_message = None
+
+    if request.method == 'POST' and request.POST.get('action') == 'coach':
+        latest = CoachAnalysis.objects.filter(user=request.user).first()
+        if latest:
+            elapsed = (timezone.now() - latest.created_at).total_seconds()
+            if elapsed < 60:
+                wait = int(60 - elapsed)
+                coach_message = ('warning', f"Please wait {wait} more seconds before refreshing.")
+            else:
+                result = get_coach_analysis(request.user)
+                if not CoachAnalysis.objects.filter(user=request.user).exists():
+                    coach_message = ('error', result)
+        else:
+            result = get_coach_analysis(request.user)
+            if not CoachAnalysis.objects.filter(user=request.user).exists():
+                coach_message = ('error', result)
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
     starting_cash = request.user.profile.starting_balance
 
@@ -695,6 +712,7 @@ def portfolio(request):
         'cost_vs_value_chart': cost_vs_value_chart,
         'portfolio_history_chart': portfolio_history_chart,
         'latest_analysis': latest_analysis,
+        'coach_message': coach_message,
     })
 
 
@@ -745,7 +763,9 @@ def coach_analysis_view(request):
                 wait = int(60 - elapsed)
                 messages.warning(request, f"Please wait {wait} more seconds before refreshing your analysis.")
                 return redirect('trading:coach_analysis')
-        get_coach_analysis(request.user)
+        result = get_coach_analysis(request.user)
+        if not CoachAnalysis.objects.filter(user=request.user).exists():
+            messages.error(request, result)
         return redirect('trading:coach_analysis')
 
     latest_analysis = CoachAnalysis.objects.filter(user=request.user).first()

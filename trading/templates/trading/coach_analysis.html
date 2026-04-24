@@ -7,7 +7,7 @@
 
 {% if messages %}
   {% for message in messages %}
-    <p class="message message-warning">{{ message }}</p>
+    <p class="message message-{{ message.tags }}">{{ message }}</p>
   {% endfor %}
 {% endif %}
 
@@ -22,7 +22,7 @@
 
 <form method="post">
   {% csrf_token %}
-  <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
+  <button type="submit" onclick="this.textContent='Analyzing...';">
     {% if latest_analysis %}Refresh Analysis{% else %}Get My Analysis{% endif %}
   </button>
 </form>

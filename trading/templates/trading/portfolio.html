@@ -42,29 +42,32 @@
 
 <div class="summary-card" style="margin:16px 0; padding:16px; border-left:4px solid #4a9eff;">
   <strong>AI Trading Coach</strong>
+  {% if coach_message %}
+    <p class="message message-{{ coach_message.0 }}" style="margin-top:8px;">{{ coach_message.1 }}</p>
+  {% endif %}
   {% if latest_analysis %}
     <div style="margin-top:8px;">{{ latest_analysis.analysis_text|linebreaks }}</div>
     <small style="color:#888;">{{ latest_analysis.created_at|date:"M j, Y g:i a" }}</small>
     <div style="margin-top:8px;">
-      <form method="post" action="{% url 'trading:coach_analysis' %}">
+      <form method="post" action="{% url 'trading:portfolio' %}">
         {% csrf_token %}
-        <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
+        <input type="hidden" name="action" value="coach">
+        <button type="submit" onclick="this.textContent='Analyzing...';">
           Refresh Analysis
         </button>
       </form>
     </div>
   {% else %}
     <p style="margin:8px 0;">Get personalized coaching feedback on your portfolio.</p>
-    <form method="post" action="{% url 'trading:coach_analysis' %}">
+    <form method="post" action="{% url 'trading:portfolio' %}">
       {% csrf_token %}
-      <button type="submit" onclick="this.disabled=true; this.textContent='Analyzing...';">
-        Get First Analysis
+      <input type="hidden" name="action" value="coach">
+      <button type="submit" onclick="this.textContent='Analyzing...';">
+        Get Analysis
       </button>
     </form>
   {% endif %}
-  <p style="color:#888; font-size:0.85em; margin-top:8px;">
-    AI-generated educational feedback. Not financial advice.
-  </p>
+  <p style="color:#888; font-size:0.85em; margin-top:8px;">AI-generated educational feedback. Not financial advice.</p>
 </div>
 
 {% if allocation_chart %}
