@@ -544,6 +544,7 @@ def portfolio(request):
     """Show current holdings based on saved trades."""
     trades_cleared = request.GET.get('demo') == 'cleared'
     coach_message = None
+    just_analyzed = False
 
     if request.method == 'POST' and request.POST.get('action') == 'coach':
         latest = CoachAnalysis.objects.filter(user=request.user).first()
@@ -552,14 +553,17 @@ def portfolio(request):
             if elapsed < 60:
                 wait = int(60 - elapsed)
                 coach_message = ('warning', f"Please wait {wait} more seconds before refreshing.")
+                just_analyzed = True
             else:
                 result = get_coach_analysis(request.user)
                 if not CoachAnalysis.objects.filter(user=request.user).exists():
                     coach_message = ('error', result)
+                just_analyzed = True
         else:
             result = get_coach_analysis(request.user)
             if not CoachAnalysis.objects.filter(user=request.user).exists():
                 coach_message = ('error', result)
+            just_analyzed = True
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
     starting_cash = request.user.profile.starting_balance
 
@@ -713,6 +717,7 @@ def portfolio(request):
         'portfolio_history_chart': portfolio_history_chart,
         'latest_analysis': latest_analysis,
         'coach_message': coach_message,
+        'just_analyzed': just_analyzed,
     })
 
 
@@ -752,24 +757,6 @@ def remove_from_watchlist(request, ticker):
         WatchlistItem.objects.filter(user=request.user, ticker=ticker.upper()).delete()
     return redirect('trading:watchlist')
 
-
-@login_required
-def coach_analysis_view(request):
-    if request.method == 'POST':
-        latest = CoachAnalysis.objects.filter(user=request.user).first()
-        if latest:
-            elapsed = (timezone.now() - latest.created_at).total_seconds()
-            if elapsed < 60:
-                wait = int(60 - elapsed)
-                messages.warning(request, f"Please wait {wait} more seconds before refreshing your analysis.")
-                return redirect('trading:coach_analysis')
-        result = get_coach_analysis(request.user)
-        if not CoachAnalysis.objects.filter(user=request.user).exists():
-            messages.error(request, result)
-        return redirect('trading:coach_analysis')
-
-    latest_analysis = CoachAnalysis.objects.filter(user=request.user).first()
-    return render(request, 'trading/coach_analysis.html', {'latest_analysis': latest_analysis})
 
 
 @login_required

@@ -40,7 +40,7 @@
     </div>
 </div>
 
-<div class="summary-card" style="margin:16px 0; padding:16px; border-left:4px solid #4a9eff;">
+<div id="coach" class="summary-card" style="margin:16px 0; padding:16px; border-left:4px solid #4a9eff;">
   <strong>AI Trading Coach</strong>
   {% if coach_message %}
     <p class="message message-{{ coach_message.0 }}" style="margin-top:8px;">{{ coach_message.1 }}</p>
@@ -65,6 +65,7 @@
       <button type="submit" onclick="this.textContent='Analyzing...';">
         Get Analysis
       </button>
+      <small style="color:#888; display:block; margin-top:6px;">This may take 15–20 seconds.</small>
     </form>
   {% endif %}
   <p style="color:#888; font-size:0.85em; margin-top:8px;">AI-generated educational feedback. Not financial advice.</p>
@@ -168,5 +169,9 @@
         <p>No holdings to show yet.</p>
         <p><a class="button-link" href="/search/">Search for a stock</a></p>
     </div>
+{% endif %}
+
+{% if just_analyzed %}
+<script>document.getElementById('coach').scrollIntoView({behavior: 'smooth'});</script>
 {% endif %}
 {% endblock %}
