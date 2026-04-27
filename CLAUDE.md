@@ -73,6 +73,8 @@ python manage.py migrate
 
 **Stock data**: All price lookups go through `yfinance`. Views handle failures gracefully so a bad ticker or API timeout never crashes the page.
 
+**Caching**: `trading/services/market_data.py` wraps yfinance calls with Django's cache framework (default `LocMemCache` — in-process, per-worker, no config needed). Valid data: 5-min TTL. Invalid/empty results: 60-sec TTL. Cache is shared within one process only — scaling to multiple Gunicorn workers would require a shared backend like Redis.
+
 **Auth**: Django's built-in system — `@login_required`, `UserCreationForm`, `get_user_model()`. No custom user model.
 
 ## Validation Requirements

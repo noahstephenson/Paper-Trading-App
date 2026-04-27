@@ -321,3 +321,174 @@ td a {
 }
 
 .trade-notes { font-size: 0.85em; color: #666; padding: 2px 8px 6px; font-style: italic; }
+
+/* ── Search page ────────────────────────────────────────────────────────────── */
+
+.search-header {
+    margin-bottom: 20px;
+}
+
+.search-form {
+    margin: 0;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+}
+
+.search-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.search-row input[type="text"] {
+    flex: 1;
+    max-width: 320px;
+    padding: 8px 12px;
+    font-size: 1rem;
+    border: 1px solid #d8dee4;
+    border-radius: 4px;
+}
+
+.stock-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.stock-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.chart-section {
+    margin-top: 16px;
+}
+
+.chart-label {
+    font-size: 0.78rem;
+    color: #888;
+    margin-bottom: 4px;
+    padding-left: 2px;
+}
+
+.chart-box-main {
+    border-radius: 6px 6px 0 0;
+    overflow: hidden;
+}
+
+.chart-box-volume {
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    overflow: hidden;
+    margin-top: -1px;
+}
+
+.chart-box-intraday {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* ── Stock detail page ──────────────────────────────────────────────────────── */
+
+.price-hero {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin: 8px 0 16px;
+}
+
+.price-main {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #1f2933;
+}
+
+.price-change {
+    font-size: 1.1rem;
+}
+
+.perf-card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    padding: 12px 16px;
+    background: #ffffff;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+    margin-bottom: 4px;
+}
+
+.perf-item strong {
+    display: block;
+    font-size: 0.72rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 2px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+}
+
+.stats-grid-header {
+    grid-column: 1 / -1;
+    margin: 0 0 4px;
+    font-size: 1rem;
+    color: #1f2933;
+}
+
+.stat-item {
+    padding: 8px 10px;
+    background: #f7f7f7;
+    border-radius: 4px;
+}
+
+.stat-item strong {
+    display: block;
+    font-size: 0.72rem;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 3px;
+}
+
+.description-box {
+    padding: 16px;
+    background: #ffffff;
+    border: 1px solid #d8dee4;
+    border-radius: 6px;
+}
+
+.description-box h3 {
+    margin-top: 0;
+}
+
+.news-item {
+    padding: 10px 0;
+    border-bottom: 1px solid #d8dee4;
+}
+
+.news-item:last-child {
+    border-bottom: none;
+}
+
+@media (max-width: 600px) {
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

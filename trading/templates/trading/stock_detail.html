@@ -3,51 +3,57 @@
 {% block title %}{{ ticker }}{% if company_name %} — {{ company_name }}{% endif %}{% endblock %}
 
 {% block content %}
-<h1>
-    {{ ticker }}{% if company_name %} &mdash; {{ company_name }}{% endif %}
-</h1>
+<h1>{{ ticker }}{% if company_name %} &mdash; {{ company_name }}{% endif %}</h1>
 
 {% if error_message %}
     <p class="message message-error">{{ error_message }}</p>
 {% endif %}
 
 {% if price %}
-<div class="summary-grid">
-    <div class="summary-card">
-        <strong>Current Price</strong>
-        <div>${{ price|floatformat:2 }}</div>
+
+<div class="price-hero">
+    <span class="price-main">${{ price|floatformat:2 }}</span>
+    {% if stock_details.daily_change is not None %}
+    <span class="{% if stock_details.daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %} price-change">
+        {% if stock_details.daily_change >= 0 %}+{% endif %}${{ stock_details.daily_change|floatformat:2 }}
+        ({% if stock_details.daily_change >= 0 %}+{% endif %}{{ stock_details.daily_change_percent|floatformat:2 }}%)
+    </span>
+    {% endif %}
+</div>
+
+<div class="perf-card">
+    <div class="perf-item">
+        <strong>Open</strong>
+        <div>${{ stock_details.open|floatformat:2 }}</div>
     </div>
     {% if stock_details.previous_close %}
-    <div class="summary-card">
-        <strong>Previous Close</strong>
+    <div class="perf-item">
+        <strong>Prev Close</strong>
         <div>${{ stock_details.previous_close|floatformat:2 }}</div>
     </div>
     {% endif %}
-    {% if stock_details.daily_change is not None %}
-    <div class="summary-card">
-        <strong>Daily Change</strong>
-        <div class="{% if stock_details.daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
-            ${{ stock_details.daily_change|floatformat:2 }}
-            ({{ stock_details.daily_change_percent|floatformat:2 }}%)
-        </div>
+    <div class="perf-item">
+        <strong>Day Range</strong>
+        <div>${{ stock_details.day_low|floatformat:2 }} &ndash; ${{ stock_details.day_high|floatformat:2 }}</div>
+    </div>
+    <div class="perf-item">
+        <strong>Volume</strong>
+        <div>{{ stock_details.volume_today|default:"—" }}</div>
+    </div>
+    {% if stock_details.avg_volume %}
+    <div class="perf-item">
+        <strong>Avg Volume</strong>
+        <div>{{ stock_details.avg_volume }}</div>
     </div>
     {% endif %}
-    <div class="summary-card">
-        <strong>Day High</strong>
-        <div>${{ stock_details.day_high|floatformat:2 }}</div>
-    </div>
-    <div class="summary-card">
-        <strong>Day Low</strong>
-        <div>${{ stock_details.day_low|floatformat:2 }}</div>
-    </div>
-    <div class="summary-card">
+    <div class="perf-item">
         <strong>Cash Available</strong>
         <div>${{ cash_balance|floatformat:2 }}</div>
     </div>
     {% if shares_owned > 0 %}
-    <div class="summary-card">
-        <strong>Shares You Own</strong>
-        <div>{{ shares_owned }}</div>
+    <div class="perf-item">
+        <strong>You Own</strong>
+        <div>{{ shares_owned }} shares</div>
     </div>
     {% endif %}
 </div>
@@ -68,12 +74,83 @@
         </form>
     {% endif %}
 </div>
+
+{% if intraday_chart_html %}
+<div class="chart-box" style="margin-top:16px;">
+    {{ intraday_chart_html|safe }}
+</div>
 {% endif %}
 
 {% if chart_html %}
-    <div class="chart-box" style="margin-top: 16px;">
-        {{ chart_html|safe }}
+<div class="chart-box" style="margin-top:16px;">
+    {{ chart_html|safe }}
+    <p style="font-size:0.8rem;color:#888;margin-top:4px;">Click 50-day MA or 200-day MA in the legend to overlay moving averages.</p>
+</div>
+{% elif chart_error %}
+<div class="message message-error" style="margin-top:16px;">{{ chart_error }}</div>
+{% endif %}
+
+{% if key_stats %}
+<div class="stats-grid" style="margin-top:24px;">
+    <h3 class="stats-grid-header">Key Statistics</h3>
+    <div class="stat-item"><strong>Market Cap</strong><div>{{ key_stats.market_cap }}</div></div>
+    <div class="stat-item"><strong>P/E Ratio</strong><div>{{ key_stats.pe_ratio }}</div></div>
+    <div class="stat-item"><strong>Forward P/E</strong><div>{{ key_stats.forward_pe }}</div></div>
+    <div class="stat-item"><strong>EPS (TTM)</strong><div>{{ key_stats.eps }}</div></div>
+    <div class="stat-item"><strong>Dividend Yield</strong><div>{{ key_stats.dividend_yield }}</div></div>
+    <div class="stat-item"><strong>52-Week High</strong><div>${{ key_stats.week_52_high }}</div></div>
+    <div class="stat-item"><strong>52-Week Low</strong><div>${{ key_stats.week_52_low }}</div></div>
+    <div class="stat-item"><strong>Avg Volume</strong><div>{{ key_stats.avg_volume }}</div></div>
+    <div class="stat-item"><strong>Beta</strong><div>{{ key_stats.beta }}</div></div>
+    <div class="stat-item"><strong>Sector</strong><div>{{ key_stats.sector }}</div></div>
+    <div class="stat-item"><strong>Industry</strong><div>{{ key_stats.industry }}</div></div>
+</div>
+{% elif stats_error %}
+<p class="message" style="margin-top:16px; padding:12px; border:1px solid #d8dee4; border-radius:6px; background:#fff;">
+    {{ stats_error }}
+</p>
+{% endif %}
+
+{% if description %}
+<div class="description-box" style="margin-top:24px;">
+    <h3>About {{ company_name }}</h3>
+    <p id="desc-short">{{ description|truncatechars:400 }}</p>
+    {% if description|length > 400 %}
+    <p id="desc-full" style="display:none;">{{ description }}</p>
+    <a href="#" id="desc-toggle" data-expanded="false">Read more</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if news_items %}
+<div style="margin-top:24px;">
+    <h3>Recent News</h3>
+    {% for item in news_items %}
+    <div class="news-item">
+        <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
+        <div style="font-size:0.8rem;color:#666;margin-top:3px;">{{ item.publisher }} &mdash; {{ item.date }}</div>
     </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endif %}{# end if price #}
+
+{% if description|length > 400 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var toggle = document.getElementById('desc-toggle');
+    if (!toggle) return;
+    toggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        var isExpanded = toggle.dataset.expanded === 'true';
+        document.getElementById('desc-short').style.display = isExpanded ? '' : 'none';
+        document.getElementById('desc-full').style.display = isExpanded ? 'none' : '';
+        toggle.textContent = isExpanded ? 'Read more' : 'Read less';
+        toggle.dataset.expanded = isExpanded ? 'false' : 'true';
+    });
+});
+</script>
 {% endif %}
 
 {% endblock %}

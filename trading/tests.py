@@ -240,38 +240,56 @@ def test_logout_post_redirects_to_home(auth_client):
 @pytest.mark.django_db
 def test_search_page_shows_price(auth_client):
     """Searching for a ticker should show the fetched price and details."""
-    with patch('trading.views.yf.Ticker') as mock_ticker:
-        mock_ticker.return_value.info = {'shortName': 'Apple Inc.'}
-        mock_ticker.return_value.history.return_value = pd.DataFrame({
+    from django.core.cache import cache
+    cache.clear()
+    mock_df = pd.DataFrame(
+        {
             'Close': [120.00, 123.45],
             'High': [121.00, 125.00],
             'Low': [119.50, 122.00],
-        })
+            'Open': [119.00, 121.00],
+            'Volume': [1_000_000, 1_200_000],
+        },
+        index=pd.date_range('2024-01-01', periods=2),
+    )
+    with patch('trading.services.market_data.yf.Ticker') as mock_ticker:
+        mock_ticker.return_value.info = {'shortName': 'Apple Inc.'}
+        mock_ticker.return_value.news = []
+        mock_ticker.return_value.history.return_value = mock_df
         response = auth_client.get('/search/', {'ticker': 'aapl'})
 
     assert response.status_code == 200
     body = response.content.decode()
     assert 'Apple Inc.' in body
     assert '123.45' in body
-    assert 'Previous Close' in body
+    assert 'Prev Close' in body
     assert '$120.00' in body
     assert '$125.00' in body
     assert '$122.00' in body
     assert '$3.45' in body
     assert '2.88%' in body
-    assert 'Trade AAPL' in body
+    assert 'Buy / Sell AAPL' in body
 
 
 @pytest.mark.django_db
 def test_search_shows_plotly_chart_for_valid_ticker(auth_client):
     """A valid ticker search should include a Plotly chart in the response."""
-    with patch('trading.views.yf.Ticker') as mock_ticker:
+    from django.core.cache import cache
+    cache.clear()
+    mock_df = pd.DataFrame(
+        {
+            'Close': [120.00 + i for i in range(50)],
+            'High':  [121.00 + i for i in range(50)],
+            'Low':   [119.00 + i for i in range(50)],
+            'Open':  [119.50 + i for i in range(50)],
+            'Volume': [1_000_000] * 50,
+        },
+        index=pd.date_range('2023-01-01', periods=50),
+    )
+    with patch('trading.services.market_data.yf.Ticker') as mock_ticker:
         mock_ticker.return_value.info = {'shortName': 'Apple Inc.'}
-        mock_ticker.return_value.history.return_value = pd.DataFrame({
-            'Close': [120.00, 123.45],
-            'High': [121.00, 125.00],
-            'Low': [119.50, 122.00],
-        })
+        mock_ticker.return_value.news = []
+        mock_ticker.return_value.history.return_value = mock_df
         response = auth_client.get('/search/', {'ticker': 'AAPL'})
 
     assert response.status_code == 200
@@ -1219,8 +1237,8 @@ def test_get_coach_analysis_api_failure_no_row_saved(mock_anthropic_class, mock_
 
 @pytest.mark.django_db
 def test_coach_view_get_renders(auth_client):
-    """GET /portfolio/coach/ returns 200 and shows the page heading."""
-    response = auth_client.get('/portfolio/coach/')
+    """The portfolio page includes the AI Trading Coach section."""
+    response = auth_client.get('/portfolio/')
     assert response.status_code == 200
     assert 'AI Trading Coach' in response.content.decode()
 
@@ -1228,35 +1246,275 @@ def test_coach_view_get_renders(auth_client):
 @pytest.mark.django_db
 @patch('trading.views.get_coach_analysis')
 def test_coach_view_post_triggers_analysis(mock_get_analysis, auth_client):
-    """POST /portfolio/coach/ calls get_coach_analysis and redirects."""
+    """POSTing action=coach to the portfolio page calls get_coach_analysis."""
     mock_get_analysis.return_value = "Test analysis."
 
-    response = auth_client.post('/portfolio/coach/')
+    response = auth_client.post('/portfolio/', {'action': 'coach'})
 
-    assert response.status_code == 302
+    assert response.status_code == 200
     mock_get_analysis.assert_called_once()
 
 
 @pytest.mark.django_db
 @patch('trading.views.get_coach_analysis')
 def test_coach_view_rate_limit_blocks_second_post(mock_get_analysis, auth_client, user):
-    """A second POST within 60 seconds is blocked with a wait message."""
+    """A second coach POST within 60 seconds is blocked with a wait message."""
     mock_get_analysis.return_value = "Analysis."
     CoachAnalysis.objects.create(user=user, portfolio_snapshot={}, analysis_text="Previous analysis.")
 
-    response = auth_client.post('/portfolio/coach/', follow=True)
+    response = auth_client.post('/portfolio/', {'action': 'coach'}, follow=True)
 
     mock_get_analysis.assert_not_called()
     assert 'Please wait' in response.content.decode()
 
 
 @pytest.mark.django_db
-def test_missing_api_key_returns_friendly_message(user, monkeypatch):
-    """get_coach_analysis returns a friendly string and saves nothing when ANTHROPIC_API_KEY is unset."""
-    monkeypatch.delenv('ANTHROPIC_API_KEY', raising=False)
-
+@patch('trading.services.ai_coach.config', return_value=None)
+def test_missing_api_key_returns_friendly_message(mock_config, user):
+    """get_coach_analysis returns a friendly string and saves nothing when the API key is absent."""
     result = get_coach_analysis(user)
 
     assert isinstance(result, str)
     assert len(result) > 0
     assert CoachAnalysis.objects.filter(user=user).count() == 0
+
+
+# ── format_large_number unit tests ────────────────────────────────────────────
+
+def test_format_large_number_returns_dash_for_none():
+    """None input should return the '—' placeholder string."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(None) == '—'
+
+
+def test_format_large_number_returns_dash_for_non_numeric():
+    """A non-numeric string should return '—' rather than crash."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number('not a number') == '—'
+
+
+def test_format_large_number_handles_zero():
+    """Zero should return the plain string '0'."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(0) == '0'
+
+
+def test_format_large_number_handles_small_number():
+    """A value below 1,000 should be returned as a plain integer string."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(999) == '999'
+
+
+def test_format_large_number_handles_thousands():
+    """A value in the thousands range should use the K suffix."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(1_500) == '1.5K'
+
+
+def test_format_large_number_handles_billions():
+    """A value in the billions range should use the B suffix."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(2_500_000_000) == '2.5B'
+
+
+def test_format_large_number_handles_trillions():
+    """A value in the trillions range should use the T suffix."""
+    from trading.services.formatting import format_large_number
+    assert format_large_number(3_000_000_000_000) == '3.0T'
+
+
+def test_format_large_number_handles_negative():
+    """Negative numbers should be formatted with a leading minus sign."""
+    from trading.services.formatting import format_large_number
+    result = format_large_number(-2_500_000_000)
+    assert result == '-2.5B'
+
+
+# ── market_data caching unit tests ────────────────────────────────────────────
+
+@patch('trading.services.market_data.yf.Ticker')
+def test_get_stock_history_caches_valid_result(mock_ticker):
+    """A second call with the same args should use the cache — yfinance called only once."""
+    from django.core.cache import cache
+    from trading.services.market_data import get_stock_history
+    cache.clear()
+
+    mock_df = pd.DataFrame(
+        {'Close': [100.0], 'High': [101.0], 'Low': [99.0], 'Open': [100.0], 'Volume': [1_000_000]},
+        index=pd.date_range('2024-01-02', periods=1),
+    )
+    mock_ticker.return_value.history.return_value = mock_df
+
+    get_stock_history('CACHETEST1', '1mo')
+    get_stock_history('CACHETEST1', '1mo')  # second call — should hit cache
+
+    assert mock_ticker.return_value.history.call_count == 1
+
+
+@patch('trading.services.market_data.yf.Ticker')
+def test_get_stock_history_caches_empty_result_for_invalid_ticker(mock_ticker):
+    """An invalid ticker (empty DataFrame) is cached to avoid hammering yfinance."""
+    from django.core.cache import cache
+    from trading.services.market_data import get_stock_history
+    cache.clear()
+
+    mock_ticker.return_value.history.return_value = pd.DataFrame()
+
+    get_stock_history('ZZZBADTICKER', '2d')
+    get_stock_history('ZZZBADTICKER', '2d')  # second call — should use cache
+
+    assert mock_ticker.return_value.history.call_count == 1
+
+
+@patch('trading.services.market_data.yf.Ticker')
+def test_get_stock_info_returns_empty_dict_on_exception(mock_ticker):
+    """When yf.Ticker().info raises, get_stock_info returns {} without propagating the error."""
+    from django.core.cache import cache
+    from unittest.mock import PropertyMock
+    from trading.services.market_data import get_stock_info
+    cache.clear()
+
+    type(mock_ticker.return_value).info = PropertyMock(side_effect=Exception('network error'))
+
+    result = get_stock_info('ERRTEST')
+
+    assert result == {}
+
+
+# ── stock_detail view tests ───────────────────────────────────────────────────
+
+def _make_hist_df(rows=5):
+    """Return a minimal yfinance-style history DataFrame with required columns."""
+    dates = pd.date_range('2024-01-02', periods=rows)
+    return pd.DataFrame(
+        {
+            'Close': [150.0 + i for i in range(rows)],
+            'High':  [152.0 + i for i in range(rows)],
+            'Low':   [148.0 + i for i in range(rows)],
+            'Open':  [149.0 + i for i in range(rows)],
+            'Volume': [1_000_000] * rows,
+        },
+        index=dates,
+    )
+
+
+@pytest.mark.django_db
+@patch('trading.services.market_data.yf.Ticker')
+def test_stock_detail_invalid_ticker_shows_error_not_crash(mock_ticker, auth_client):
+    """An invalid ticker (empty history) shows an error message and returns 200."""
+    from django.core.cache import cache
+    cache.clear()
+    mock_ticker.return_value.history.return_value = pd.DataFrame()
+
+    response = auth_client.get('/stock/ZZZZ/')
+
+    assert response.status_code == 200
+    assert 'No stock data found for that ticker.' in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch('trading.services.market_data.yf.Ticker')
+def test_stock_detail_empty_info_shows_stats_error(mock_ticker, auth_client):
+    """When .info returns {}, stats_error is displayed and the page does not crash."""
+    from django.core.cache import cache
+    cache.clear()
+
+    def history_side_effect(period=None, interval='1d', **kwargs):
+        return _make_hist_df(rows=2)
+
+    mock_ticker.return_value.history.side_effect = history_side_effect
+    mock_ticker.return_value.info = {}
+    mock_ticker.return_value.news = []
+
+    response = auth_client.get('/stock/INFOERR/')
+
+    assert response.status_code == 200
+    assert 'Additional data unavailable right now.' in response.content.decode()
+
+
+@pytest.mark.django_db
+@patch('trading.services.market_data.yf.Ticker')
+def test_stock_detail_sparse_info_shows_dashes_not_none(mock_ticker, auth_client):
+    """Missing .info fields render as '—' in the stats grid — never as Python 'None'."""
+    from django.core.cache import cache
+    cache.clear()
+
+    def history_side_effect(period=None, interval='1d', **kwargs):
+        return _make_hist_df(rows=50 if period == '5y' else 2)
+
+    mock_ticker.return_value.history.side_effect = history_side_effect
+    mock_ticker.return_value.info = {'shortName': 'Test Corp'}  # most fields absent
+    mock_ticker.return_value.news = []
+
+    response = auth_client.get('/stock/SPARSE/')
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'Key Statistics' in body
+    assert 'None' not in body  # raw Python None must never leak into the HTML
+
+
+@pytest.mark.django_db
+@patch('trading.services.market_data.yf.Ticker')
+def test_stock_detail_valid_ticker_renders_all_sections(mock_ticker, auth_client):
+    """A fully-mocked valid ticker renders company name, stats, description, and news."""
+    from django.core.cache import cache
+    cache.clear()
+
+    def history_side_effect(period=None, interval='1d', **kwargs):
+        return _make_hist_df(rows=50 if period == '5y' else 2)
+
+    mock_ticker.return_value.history.side_effect = history_side_effect
+    mock_ticker.return_value.info = {
+        'shortName': 'Apple Inc.',
+        'marketCap': 2_980_000_000_000,
+        'trailingPE': 28.5,
+        'sector': 'Technology',
+        'industry': 'Consumer Electronics',
+        'longBusinessSummary': 'Apple Inc. designs, manufactures, and markets consumer electronics.',
+    }
+    mock_ticker.return_value.news = [
+        {
+            'title': 'Apple hits new high',
+            'publisher': 'Reuters',
+            'link': 'https://example.com/news1',
+            'providerPublishTime': 1_700_000_000,
+        },
+    ]
+
+    response = auth_client.get('/stock/AAPL/')
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'Apple Inc.' in body             # company name in header
+    assert 'Key Statistics' in body         # stats grid rendered
+    assert 'Technology' in body             # sector field
+    assert 'Apple Inc. designs' in body     # company description
+    assert 'Apple hits new high' in body    # news headline
+
+
+@pytest.mark.django_db
+@patch('trading.services.market_data.yf.Ticker')
+def test_stock_detail_graceful_degradation_when_5y_history_fails(mock_ticker, auth_client):
+    """When 5Y history returns empty, chart_error is shown but key stats still render."""
+    from django.core.cache import cache
+    cache.clear()
+
+    def history_side_effect(period=None, interval='1d', **kwargs):
+        if period == '2d':
+            return _make_hist_df(rows=2)
+        return pd.DataFrame()  # empty for 5y and intraday
+
+    mock_ticker.return_value.history.side_effect = history_side_effect
+    mock_ticker.return_value.info = {
+        'shortName': 'Apple Inc.',
+        'sector': 'Technology',
+    }
+    mock_ticker.return_value.news = []
+
+    response = auth_client.get('/stock/AAPL/')
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    assert 'Price chart unavailable right now.' in body  # chart_error shown
+    assert 'Key Statistics' in body                      # stats still rendered

@@ -1,79 +1,175 @@
 {% extends "trading/base.html" %}
 
-{% block title %}Search Stocks{% endblock %}
+{% block title %}{% if ticker %}{{ ticker }}{% if company_name %} — {{ company_name }}{% endif %}{% else %}Search Stocks{% endif %}{% endblock %}
 
 {% block content %}
-<h1>Search for a Stock</h1>
 
-<form method="get" style="margin-bottom: 0;">
-    <div class="form-group" style="display:flex; gap:8px; align-items:flex-end;">
-        <div>
-            <label for="ticker">Ticker Symbol</label>
-            <input type="text" id="ticker" name="ticker" value="{{ ticker|default:'' }}" placeholder="e.g. AAPL">
+<div class="search-header">
+    <form method="get" class="search-form">
+        <div class="search-row">
+            <input type="text" name="ticker" value="{{ ticker|default:'' }}"
+                   placeholder="e.g. AAPL, MSFT, TSLA" autofocus>
+            <button type="submit">Search</button>
         </div>
-        <button type="submit">Search</button>
-    </div>
-</form>
+    </form>
+</div>
 
 {% if not ticker and not error_message %}
-    <div class="empty-state">
-        <p>Try searching for a stock like <strong>AAPL</strong>, <strong>MSFT</strong>, or <strong>TSLA</strong>.</p>
-    </div>
+<div class="empty-state">
+    <p>Search for a stock to see its price chart, key stats, and recent news.</p>
+    <p style="color:#888;font-size:0.9rem;">Try <strong>AAPL</strong>, <strong>MSFT</strong>, or <strong>TSLA</strong>.</p>
+</div>
 {% endif %}
 
 {% if error_message %}
-    <p class="message message-error">{{ error_message }}</p>
+<p class="message message-error">{{ error_message }}</p>
 {% endif %}
 
-{% if ticker and price %}
-    <h2>
-        {{ ticker }}{% if company_name %} &mdash; {{ company_name }}{% endif %}
-    </h2>
+{% if price %}
 
-    <div class="summary-grid">
-        <div class="summary-card">
-            <strong>Current Price</strong>
-            <div>${{ price|floatformat:2 }}</div>
-        </div>
-        {% if stock_details.previous_close %}
-        <div class="summary-card">
-            <strong>Previous Close</strong>
-            <div>${{ stock_details.previous_close|floatformat:2 }}</div>
-        </div>
-        {% endif %}
-        {% if stock_details.daily_change is not None %}
-        <div class="summary-card">
-            <strong>Daily Change</strong>
-            <div class="{% if stock_details.daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
-                ${{ stock_details.daily_change|floatformat:2 }}
-                ({{ stock_details.daily_change_percent|floatformat:2 }}%)
-            </div>
-        </div>
-        {% endif %}
-        <div class="summary-card">
-            <strong>Day High</strong>
-            <div>${{ stock_details.day_high|floatformat:2 }}</div>
-        </div>
-        <div class="summary-card">
-            <strong>Day Low</strong>
-            <div>${{ stock_details.day_low|floatformat:2 }}</div>
+{# ── Header ──────────────────────────────────────────────────────────────── #}
+<div class="stock-header">
+    <div>
+        <h2 style="margin:0;">{{ ticker }}{% if company_name %} &mdash; {{ company_name }}{% endif %}</h2>
+        <div class="price-hero">
+            <span class="price-main">${{ price|floatformat:2 }}</span>
+            {% if stock_details.daily_change is not None %}
+            <span class="price-change {% if stock_details.daily_change >= 0 %}gain-positive{% else %}gain-negative{% endif %}">
+                {% if stock_details.daily_change >= 0 %}+{% endif %}${{ stock_details.daily_change|floatformat:2 }}
+                &nbsp;({% if stock_details.daily_change >= 0 %}+{% endif %}{{ stock_details.daily_change_percent|floatformat:2 }}%)
+            </span>
+            {% endif %}
         </div>
     </div>
-
-    <div class="inline-actions" style="margin: 16px 0;">
-        <a class="button-link" href="/stock/{{ ticker }}/">View Detail</a>
-        <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Trade {{ ticker }}</a>
-        <form method="post" action="{% url 'trading:watchlist' %}" style="display:inline;">
+    <div class="stock-actions">
+        <a class="button-link" href="/trade/new/?ticker={{ ticker }}">Buy / Sell {{ ticker }}</a>
+        <form method="post" action="{% url 'trading:watchlist' %}" style="display:inline; border:none; padding:0; background:none; margin:0;">
             {% csrf_token %}
             <input type="hidden" name="ticker" value="{{ ticker }}">
             <button type="submit" class="button-link">+ Watchlist</button>
         </form>
     </div>
+</div>
+
+{# ── Today's stats row ────────────────────────────────────────────────────── #}
+<div class="perf-card">
+    <div class="perf-item">
+        <strong>Open</strong>
+        <div>${{ stock_details.open|floatformat:2 }}</div>
+    </div>
+    {% if stock_details.previous_close %}
+    <div class="perf-item">
+        <strong>Prev Close</strong>
+        <div>${{ stock_details.previous_close|floatformat:2 }}</div>
+    </div>
+    {% endif %}
+    <div class="perf-item">
+        <strong>Day Range</strong>
+        <div>${{ stock_details.day_low|floatformat:2 }} &ndash; ${{ stock_details.day_high|floatformat:2 }}</div>
+    </div>
+    <div class="perf-item">
+        <strong>Volume</strong>
+        <div>{{ stock_details.volume_today|default:"—" }}</div>
+    </div>
+    {% if stock_details.avg_volume %}
+    <div class="perf-item">
+        <strong>Avg Volume</strong>
+        <div>{{ stock_details.avg_volume }}</div>
+    </div>
+    {% endif %}
+</div>
+
+{# ── Charts ───────────────────────────────────────────────────────────────── #}
+{% if chart_error %}
+<div class="message message-error" style="margin-top:16px;">{{ chart_error }}</div>
 {% endif %}
 
-{% if chart_html %}
-    <div class="chart-box" style="margin-top: 16px;">
-        {{ chart_html|safe }}
+{% if price_chart_html %}
+<div class="chart-section">
+    <div class="chart-label">Price History &mdash; click MA lines in legend to overlay moving averages</div>
+    <div class="chart-box chart-box-main">
+        {{ price_chart_html|safe }}
     </div>
+
+    {% if volume_chart_html %}
+    <div class="chart-box chart-box-volume">
+        {{ volume_chart_html|safe }}
+    </div>
+    {% endif %}
+
+    {% if intraday_chart_html %}
+    <div class="chart-label" style="margin-top:12px;">Today&rsquo;s Trading Activity</div>
+    <div class="chart-box chart-box-intraday">
+        {{ intraday_chart_html|safe }}
+    </div>
+    {% endif %}
+</div>
 {% endif %}
+
+{# ── Key stats ────────────────────────────────────────────────────────────── #}
+{% if key_stats %}
+<div class="stats-grid" style="margin-top:24px;">
+    <h3 class="stats-grid-header">Key Statistics</h3>
+    <div class="stat-item"><strong>Market Cap</strong><div>{{ key_stats.market_cap }}</div></div>
+    <div class="stat-item"><strong>P/E Ratio</strong><div>{{ key_stats.pe_ratio }}</div></div>
+    <div class="stat-item"><strong>Forward P/E</strong><div>{{ key_stats.forward_pe }}</div></div>
+    <div class="stat-item"><strong>EPS (TTM)</strong><div>{{ key_stats.eps }}</div></div>
+    <div class="stat-item"><strong>Dividend Yield</strong><div>{{ key_stats.dividend_yield }}</div></div>
+    <div class="stat-item"><strong>52-Week High</strong><div>${{ key_stats.week_52_high }}</div></div>
+    <div class="stat-item"><strong>52-Week Low</strong><div>${{ key_stats.week_52_low }}</div></div>
+    <div class="stat-item"><strong>Avg Volume</strong><div>{{ key_stats.avg_volume }}</div></div>
+    <div class="stat-item"><strong>Beta</strong><div>{{ key_stats.beta }}</div></div>
+    <div class="stat-item"><strong>Sector</strong><div>{{ key_stats.sector }}</div></div>
+    <div class="stat-item"><strong>Industry</strong><div>{{ key_stats.industry }}</div></div>
+</div>
+{% elif stats_error %}
+<p class="message" style="margin-top:16px;padding:12px;border:1px solid #d8dee4;border-radius:6px;background:#fff;">
+    {{ stats_error }}
+</p>
+{% endif %}
+
+{# ── Company description ──────────────────────────────────────────────────── #}
+{% if description %}
+<div class="description-box" style="margin-top:24px;">
+    <h3>About {{ company_name }}</h3>
+    <p id="desc-short">{{ description|truncatechars:400 }}</p>
+    {% if description|length > 400 %}
+    <p id="desc-full" style="display:none;">{{ description }}</p>
+    <a href="#" id="desc-toggle" data-expanded="false">Read more</a>
+    {% endif %}
+</div>
+{% endif %}
+
+{# ── Recent news ──────────────────────────────────────────────────────────── #}
+{% if news_items %}
+<div style="margin-top:24px;">
+    <h3>Recent News</h3>
+    {% for item in news_items %}
+    <div class="news-item">
+        <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
+        <div style="font-size:0.8rem;color:#666;margin-top:3px;">{{ item.publisher }} &mdash; {{ item.date }}</div>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% endif %}{# end if price #}
+
+{% if description|length > 400 %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var toggle = document.getElementById('desc-toggle');
+    if (!toggle) return;
+    toggle.addEventListener('click', function(e) {
+        e.preventDefault();
+        var isExpanded = toggle.dataset.expanded === 'true';
+        document.getElementById('desc-short').style.display = isExpanded ? '' : 'none';
+        document.getElementById('desc-full').style.display = isExpanded ? 'none' : '';
+        toggle.textContent = isExpanded ? 'Read more' : 'Read less';
+        toggle.dataset.expanded = isExpanded ? 'false' : 'true';
+    });
+});
+</script>
+{% endif %}
+
 {% endblock %}

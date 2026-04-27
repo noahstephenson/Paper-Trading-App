@@ -1,4 +1,5 @@
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -7,12 +8,16 @@ from django.shortcuts import redirect, render
 from django.utils import timezone
 
 from .forms import RegistrationForm
+import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import yfinance as yf
 
 from .models import Trade, UserProfile, WatchlistItem, CoachAnalysis
 from .services.portfolio import compute_trade_state
 from .services.ai_coach import get_coach_analysis
+from .services.market_data import get_stock_history, get_stock_info, get_stock_news
+from .services.formatting import format_large_number
 
 VALID_TRADE_TYPES = {Trade.BUY, Trade.SELL}
 STARTING_CASH = Decimal('100000.00')
@@ -53,6 +58,250 @@ def get_trade_balances(user, ticker, starting_cash):
     return cash_balance, current_shares
 
 
+
+
+def _build_key_stats(info):
+    """Build a formatted dict of key stats from a yfinance .info dict."""
+    def fmt_float(val):
+        if val is None:
+            return '—'
+        try:
+            return f'{float(val):.2f}'
+        except (TypeError, ValueError):
+            return '—'
+
+    div_yield = info.get('dividendYield')
+    try:
+        div_yield_fmt = f'{float(div_yield) * 100:.2f}%' if div_yield is not None else '—'
+    except (TypeError, ValueError):
+        div_yield_fmt = '—'
+
+    return {
+        'market_cap': format_large_number(info.get('marketCap')),
+        'pe_ratio': fmt_float(info.get('trailingPE')),
+        'forward_pe': fmt_float(info.get('forwardPE')),
+        'eps': fmt_float(info.get('trailingEps')),
+        'dividend_yield': div_yield_fmt,
+        'week_52_high': fmt_float(info.get('fiftyTwoWeekHigh')),
+        'week_52_low': fmt_float(info.get('fiftyTwoWeekLow')),
+        'avg_volume': format_large_number(info.get('averageVolume')),
+        'beta': fmt_float(info.get('beta')),
+        'sector': info.get('sector') or '—',
+        'industry': info.get('industry') or '—',
+    }
+
+
+def _format_news(news_list):
+    """Format raw yfinance news items into safe dicts for the template."""
+    items = []
+    for item in news_list:
+        try:
+            ts = item.get('providerPublishTime', 0)
+            date_str = datetime.fromtimestamp(ts).strftime('%b %d, %Y')
+        except Exception:
+            date_str = ''
+        items.append({
+            'title': item.get('title', ''),
+            'publisher': item.get('publisher', ''),
+            'link': item.get('link', '#'),
+            'date': date_str,
+        })
+    return items
+
+
+def _build_price_chart(ticker, hist):
+    """Big standalone price chart with rangeselector and toggleable MA overlays."""
+    hist = hist.copy()
+    if hist.index.tz is not None:
+        hist.index = hist.index.tz_convert(None)
+
+    hist['MA50'] = hist['Close'].rolling(50).mean()
+    hist['MA200'] = hist['Close'].rolling(200).mean()
+    one_month_ago = hist.index[-1] - pd.DateOffset(months=1)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['Close'],
+        mode='lines', name='Price',
+        line=dict(color='#0b5cab', width=2),
+    ))
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['MA50'],
+        mode='lines', name='50-day MA',
+        line=dict(color='#e67e22', width=1, dash='dot'),
+        visible='legendonly',
+    ))
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['MA200'],
+        mode='lines', name='200-day MA',
+        line=dict(color='#8e44ad', width=1, dash='dot'),
+        visible='legendonly',
+    ))
+
+    fig.update_layout(
+        yaxis_title='Price (USD)',
+        margin=dict(l=40, r=20, t=40, b=10),
+        height=400,
+        legend=dict(orientation='h', yanchor='bottom', y=1.01, xanchor='right', x=1),
+        xaxis=dict(
+            rangeselector=dict(
+                buttons=[
+                    dict(count=1, label='1D', step='day', stepmode='backward'),
+                    dict(count=5, label='5D', step='day', stepmode='backward'),
+                    dict(count=1, label='1M', step='month', stepmode='backward'),
+                    dict(count=3, label='3M', step='month', stepmode='backward'),
+                    dict(count=6, label='6M', step='month', stepmode='backward'),
+                    dict(count=1, label='1Y', step='year', stepmode='backward'),
+                    dict(label='5Y', step='all'),
+                ],
+            ),
+            rangeslider=dict(visible=False),
+            type='date',
+            range=[str(one_month_ago.date()), str(hist.index[-1].date())],
+        ),
+    )
+    return fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+
+def _build_volume_chart(ticker, hist):
+    """Smaller volume bar chart colored green/red by daily direction."""
+    hist = hist.copy()
+    if hist.index.tz is not None:
+        hist.index = hist.index.tz_convert(None)
+
+    prev_close = hist['Close'].shift(1)
+    colors = [
+        '#27ae60' if c >= p else '#c0392b'
+        for c, p in zip(hist['Close'], prev_close)
+    ]
+    one_month_ago = hist.index[-1] - pd.DateOffset(months=1)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=hist.index, y=hist['Volume'],
+        name='Volume',
+        marker_color=colors,
+        showlegend=False,
+    ))
+    fig.update_layout(
+        yaxis_title='Volume',
+        margin=dict(l=40, r=20, t=10, b=40),
+        height=160,
+        xaxis=dict(
+            rangeslider=dict(visible=False),
+            type='date',
+            range=[str(one_month_ago.date()), str(hist.index[-1].date())],
+        ),
+    )
+    return fig.to_html(full_html=False, include_plotlyjs=False)
+
+
+def _build_stock_chart(ticker, hist):
+    """Build combined price+volume Plotly figure with rangeselector and MA overlays."""
+    hist = hist.copy()
+    if hist.index.tz is not None:
+        hist.index = hist.index.tz_convert(None)
+
+    hist['MA50'] = hist['Close'].rolling(50).mean()
+    hist['MA200'] = hist['Close'].rolling(200).mean()
+
+    prev_close = hist['Close'].shift(1)
+    vol_colors = [
+        '#27ae60' if c >= p else '#c0392b'
+        for c, p in zip(hist['Close'], prev_close)
+    ]
+
+    fig = make_subplots(
+        rows=2, cols=1,
+        shared_xaxes=True,
+        row_heights=[0.7, 0.3],
+        vertical_spacing=0.05,
+    )
+
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['Close'],
+        mode='lines', name='Price',
+        line=dict(color='#0b5cab', width=2),
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['MA50'],
+        mode='lines', name='50-day MA',
+        line=dict(color='#e67e22', width=1, dash='dot'),
+        visible='legendonly',
+    ), row=1, col=1)
+
+    fig.add_trace(go.Scatter(
+        x=hist.index, y=hist['MA200'],
+        mode='lines', name='200-day MA',
+        line=dict(color='#8e44ad', width=1, dash='dot'),
+        visible='legendonly',
+    ), row=1, col=1)
+
+    fig.add_trace(go.Bar(
+        x=hist.index, y=hist['Volume'],
+        name='Volume',
+        marker_color=vol_colors,
+        showlegend=False,
+    ), row=2, col=1)
+
+    one_month_ago = hist.index[-1] - pd.DateOffset(months=1)
+
+    fig.update_layout(
+        title=f'{ticker} — Price & Volume',
+        yaxis_title='Price (USD)',
+        yaxis2_title='Volume',
+        margin=dict(l=40, r=20, t=60, b=40),
+        height=520,
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+        xaxis=dict(
+            rangeselector=dict(
+                buttons=[
+                    dict(count=1, label='1D', step='day', stepmode='backward'),
+                    dict(count=5, label='5D', step='day', stepmode='backward'),
+                    dict(count=1, label='1M', step='month', stepmode='backward'),
+                    dict(count=3, label='3M', step='month', stepmode='backward'),
+                    dict(count=6, label='6M', step='month', stepmode='backward'),
+                    dict(count=1, label='1Y', step='year', stepmode='backward'),
+                    dict(label='5Y', step='all'),
+                ],
+            ),
+            rangeslider=dict(visible=False),
+            type='date',
+            range=[str(one_month_ago.date()), str(hist.index[-1].date())],
+        ),
+    )
+
+    return fig.to_html(full_html=False, include_plotlyjs='cdn')
+
+
+def _build_intraday_chart(ticker, hist):
+    """Build a simple intraday price line chart for today's trading activity."""
+    if hist is None or hist.empty:
+        return None
+
+    hist = hist.copy()
+    if hist.index.tz is not None:
+        hist.index = hist.index.tz_convert(None)
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=hist.index,
+        y=hist['Close'],
+        mode='lines',
+        name='Price',
+        line=dict(color='#0b5cab', width=2),
+        fill='tozeroy',
+        fillcolor='rgba(11,92,171,0.1)',
+    ))
+    fig.update_layout(
+        title=f"{ticker} — Today's Trading Activity",
+        xaxis_title='Time',
+        yaxis_title='Price (USD)',
+        margin=dict(l=40, r=20, t=50, b=40),
+        height=220,
+    )
+    return fig.to_html(full_html=False, include_plotlyjs='cdn')
 
 
 def build_portfolio_history(trades, starting_cash=STARTING_CASH):
@@ -205,84 +454,93 @@ def register(request):
 
 @login_required
 def search(request):
-    """Handle ticker search and fetch stock data."""
+    """Stock search — returns full research data for a ticker on the same page."""
     ticker = None
     price = None
     company_name = None
     stock_details = None
-    chart_html = None
+    price_chart_html = None
+    volume_chart_html = None
+    intraday_chart_html = None
+    key_stats = None
+    description = ''
+    news_items = []
     error_message = None
+    stats_error = None
+    chart_error = None
 
     if 'ticker' in request.GET:
         ticker = request.GET['ticker'].strip().upper()
 
-        if ticker:
-            try:
-                stock = yf.Ticker(ticker)
-                data = stock.history(period='2d')
-                try:
-                    company_name = stock.info.get('shortName')
-                except Exception:
-                    company_name = None
-
-                if not data.empty:
-                    latest_row = data.iloc[-1]
-                    price = round(float(latest_row['Close']), 2)
-                    stock_details = {
-                        'day_high': round(float(latest_row['High']), 2),
-                        'day_low': round(float(latest_row['Low']), 2),
-                    }
-
-                    if len(data) > 1:
-                        previous_close = round(float(data['Close'].iloc[-2]), 2)
-                        daily_change = round(price - previous_close, 2)
-                        if previous_close != 0:
-                            daily_change_percent = round((daily_change / previous_close) * 100, 2)
-                        else:
-                            daily_change_percent = 0
-
-                        stock_details['previous_close'] = previous_close
-                        stock_details['daily_change'] = daily_change
-                        stock_details['daily_change_percent'] = daily_change_percent
-                    try:
-                        hist = stock.history(period='1mo')
-                        if not hist.empty:
-                            fig = go.Figure()
-                            fig.add_trace(go.Scatter(
-                                x=hist.index,
-                                y=hist['Close'],
-                                mode='lines',
-                                name='Close',
-                            ))
-                            fig.update_layout(
-                                title=f'{ticker} — Last 30 Days',
-                                xaxis_title='Date',
-                                yaxis_title='Price (USD)',
-                                margin=dict(l=40, r=20, t=50, b=40),
-                            )
-                            chart_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
-                    except Exception:
-                        chart_html = None
-                else:
-                    error_message = 'No stock data was found for that ticker.'
-            except Exception:
-                error_message = 'Could not fetch stock data right now.'
-        else:
+        if not ticker:
             error_message = 'Please enter a ticker symbol.'
+        else:
+            data = get_stock_history(ticker, period='2d')
+            if data.empty:
+                error_message = 'No stock data was found for that ticker.'
+            else:
+                latest_row = data.iloc[-1]
+                price = round(float(latest_row['Close']), 2)
+                stock_details = {
+                    'day_high': round(float(latest_row['High']), 2),
+                    'day_low': round(float(latest_row['Low']), 2),
+                    'open': round(float(latest_row['Open']), 2),
+                    'volume_today': int(latest_row['Volume']),
+                }
+                if len(data) > 1:
+                    previous_close = round(float(data['Close'].iloc[-2]), 2)
+                    daily_change = round(price - previous_close, 2)
+                    daily_change_percent = round((daily_change / previous_close) * 100, 2) if previous_close != 0 else 0
+                    stock_details['previous_close'] = previous_close
+                    stock_details['daily_change'] = daily_change
+                    stock_details['daily_change_percent'] = daily_change_percent
+
+                info = get_stock_info(ticker)
+                if info:
+                    company_name = info.get('shortName') or ticker
+                    avg_vol = info.get('averageVolume')
+                    if avg_vol is not None:
+                        stock_details['avg_volume'] = format_large_number(avg_vol)
+                    key_stats = _build_key_stats(info)
+                    description = info.get('longBusinessSummary') or ''
+                else:
+                    stats_error = 'Additional data unavailable right now.'
+
+                news_items = _format_news(get_stock_news(ticker))
+
+                hist_5y = get_stock_history(ticker, period='5y')
+                if not hist_5y.empty:
+                    try:
+                        price_chart_html = _build_price_chart(ticker, hist_5y)
+                        volume_chart_html = _build_volume_chart(ticker, hist_5y)
+                    except Exception:
+                        chart_error = 'Price chart unavailable right now.'
+                else:
+                    chart_error = 'Price chart unavailable right now.'
+
+                hist_1d = get_stock_history(ticker, period='1d', interval='5m')
+                intraday_chart_html = _build_intraday_chart(ticker, hist_1d)
 
     return render(request, 'trading/search.html', {
         'ticker': ticker,
         'price': price,
         'company_name': company_name,
         'stock_details': stock_details,
-        'chart_html': chart_html,
+        'price_chart_html': price_chart_html,
+        'volume_chart_html': volume_chart_html,
+        'intraday_chart_html': intraday_chart_html,
+        'key_stats': key_stats,
+        'description': description,
+        'news_items': news_items,
         'error_message': error_message,
+        'stats_error': stats_error,
+        'chart_error': chart_error,
     })
 
 
 @login_required
 def stock_detail(request, ticker):
-    """Dedicated page for a single stock — price info, chart, watchlist, and trade links."""
+    """Dedicated page for a single stock with charts, key stats, description, and news."""
     ticker = ticker.upper()
 
     if request.method == 'POST':
@@ -297,54 +555,59 @@ def stock_detail(request, ticker):
     company_name = None
     stock_details = None
     chart_html = None
+    intraday_chart_html = None
+    key_stats = None
+    description = ''
+    news_items = []
     error_message = None
+    stats_error = None
+    chart_error = None
     on_watchlist = WatchlistItem.objects.filter(user=request.user, ticker=ticker).exists()
 
-    try:
-        stock = yf.Ticker(ticker)
-        data = stock.history(period='2d')
-        try:
-            company_name = stock.info.get('shortName')
-        except Exception:
-            company_name = None
+    data = get_stock_history(ticker, period='2d')
+    if data.empty:
+        error_message = 'No stock data found for that ticker.'
+    else:
+        latest_row = data.iloc[-1]
+        price = round(float(latest_row['Close']), 2)
+        stock_details = {
+            'day_high': round(float(latest_row['High']), 2),
+            'day_low': round(float(latest_row['Low']), 2),
+            'open': round(float(latest_row['Open']), 2),
+            'volume_today': int(latest_row['Volume']),
+        }
+        if len(data) > 1:
+            previous_close = round(float(data['Close'].iloc[-2]), 2)
+            daily_change = round(price - previous_close, 2)
+            daily_change_percent = round((daily_change / previous_close) * 100, 2) if previous_close != 0 else 0
+            stock_details['previous_close'] = previous_close
+            stock_details['daily_change'] = daily_change
+            stock_details['daily_change_percent'] = daily_change_percent
 
-        if not data.empty:
-            latest_row = data.iloc[-1]
-            price = round(float(latest_row['Close']), 2)
-            stock_details = {
-                'day_high': round(float(latest_row['High']), 2),
-                'day_low': round(float(latest_row['Low']), 2),
-            }
-            if len(data) > 1:
-                previous_close = round(float(data['Close'].iloc[-2]), 2)
-                daily_change = round(price - previous_close, 2)
-                daily_change_percent = round((daily_change / previous_close) * 100, 2) if previous_close != 0 else 0
-                stock_details['previous_close'] = previous_close
-                stock_details['daily_change'] = daily_change
-                stock_details['daily_change_percent'] = daily_change_percent
-            try:
-                hist = stock.history(period='1mo')
-                if not hist.empty:
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=hist.index,
-                        y=hist['Close'],
-                        mode='lines',
-                        name='Close',
-                    ))
-                    fig.update_layout(
-                        title=f'{ticker} — Last 30 Days',
-                        xaxis_title='Date',
-                        yaxis_title='Price (USD)',
-                        margin=dict(l=40, r=20, t=50, b=40),
-                    )
-                    chart_html = fig.to_html(full_html=False, include_plotlyjs='cdn')
-            except Exception:
-                chart_html = None
+        info = get_stock_info(ticker)
+        if info:
+            company_name = info.get('shortName') or ticker
+            avg_vol = info.get('averageVolume')
+            if avg_vol is not None:
+                stock_details['avg_volume'] = format_large_number(avg_vol)
+            key_stats = _build_key_stats(info)
+            description = info.get('longBusinessSummary') or ''
         else:
-            error_message = 'No stock data found for that ticker.'
-    except Exception:
-        error_message = 'Could not fetch stock data right now.'
+            stats_error = 'Additional data unavailable right now.'
+
+        news_items = _format_news(get_stock_news(ticker))
+
+        hist_5y = get_stock_history(ticker, period='5y')
+        if not hist_5y.empty:
+            try:
+                chart_html = _build_stock_chart(ticker, hist_5y)
+            except Exception:
+                chart_error = 'Price chart unavailable right now.'
+        else:
+            chart_error = 'Price chart unavailable right now.'
+
+        hist_1d = get_stock_history(ticker, period='1d', interval='5m')
+        intraday_chart_html = _build_intraday_chart(ticker, hist_1d)
 
     trades = Trade.objects.filter(user=request.user).order_by('created_at')
     holdings, _, _, _ = compute_trade_state(trades)
@@ -357,7 +620,13 @@ def stock_detail(request, ticker):
         'price': price,
         'stock_details': stock_details,
         'chart_html': chart_html,
+        'intraday_chart_html': intraday_chart_html,
+        'key_stats': key_stats,
+        'description': description,
+        'news_items': news_items,
         'error_message': error_message,
+        'stats_error': stats_error,
+        'chart_error': chart_error,
         'on_watchlist': on_watchlist,
         'shares_owned': shares_owned,
         'cash_balance': cash_balance,
