@@ -13,8 +13,10 @@ I kept the project intentionally small. The goal was not to build a full trading
 - displays a 30-day closing price chart on the search page using Plotly
 - saves paper `BUY` and `SELL` trades in SQLite
 - uses a two-step trade flow so the user can review the price before confirming the trade
+- shows a 1-sentence AI comment on the proposed trade at the review step, based on the user's current position and cash balance
 - lets the user jump from search results straight into the trade page with the ticker prefilled
 - shows a portfolio page based on saved trades, including average cost, gain/loss, and two Plotly charts
+- includes an AI Trading Coach on the portfolio page that gives a short analysis of the user's overall trading activity
 - shows a watchlist page where a user can save and track tickers they care about
 - shows a trade history page with past transactions
 - lets me inspect saved data in Django admin
@@ -177,7 +179,9 @@ sequenceDiagram
         alt Validation fails
             TradeView-->>User: Show error message
         else Trade is valid
-            TradeView-->>User: Show review step
+            TradeView->>Claude: Send trade + portfolio context
+            Claude-->>TradeView: 1-sentence evaluation
+            TradeView-->>User: Show review step with AI comment
             User->>TradeView: Save reviewed trade
             TradeView->>TradeDB: Save trade
             TradeView-->>User: Show success message
@@ -262,12 +266,13 @@ If I were showing this project in class, this is the path I would take:
 3. Search a ticker like `AAPL` — see the 30-day price chart and stock details.
 4. Click the ticker to open the Stock Detail page — add it to the watchlist.
 5. Click into the trade page and enter a `BUY`.
-6. Review the fetched price on the confirmation step.
+6. Review the fetched price on the confirmation step — note the AI comment about the trade.
 7. Save the trade.
 8. Open trade history to show the saved row.
 9. Open the portfolio page to show updated holdings, gain/loss metrics, and charts.
-10. Open the watchlist to show saved tickers.
-11. Open Django admin to show the raw data in the database.
+10. Click the AI Trading Coach button to get a short AI analysis of the portfolio.
+11. Open the watchlist to show saved tickers.
+12. Open Django admin to show the raw data in the database.
 
 ## Tech Used
 
@@ -275,6 +280,7 @@ If I were showing this project in class, this is the path I would take:
 - SQLite
 - `yfinance` for live stock data
 - `Plotly` for interactive charts
+- Claude Haiku (Anthropic API) for AI trade evaluation and portfolio coaching
 - HTML templates and basic CSS
 - `pytest` and `pytest-django` for the test suite
 - Mermaid for project diagrams
@@ -290,7 +296,6 @@ It does not include:
 - REST APIs
 - advanced dashboards
 - options trading
-- machine learning or recommendations
 
 The main idea was to keep the code understandable and focused on core Django concepts like routing, views, templates, models, forms, authentication, and database persistence.
 
