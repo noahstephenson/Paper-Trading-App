@@ -65,6 +65,9 @@
         {% if notes %}
         <p style="margin-top: 10px;"><strong>Your thesis:</strong> {{ notes }}</p>
         {% endif %}
+        {% if trade_evaluation %}
+        <p style="margin-top: 10px; color: #555; font-style: italic;">AI: {{ trade_evaluation }}</p>
+        {% endif %}
         <form method="post" style="margin-top: 12px; border: none; padding: 0; background: none;">
             {% csrf_token %}
             <button type="submit" name="form_action" value="confirm">Confirm &amp; Save Trade</button>

@@ -159,3 +159,34 @@ def get_coach_analysis(user):
     except Exception as e:
         logger.error("Anthropic API error: %s", e)
         return "The AI coach is temporarily unavailable. Please try again later."
+
+
+def get_trade_evaluation(ticker, trade_type, quantity, price, cash_balance, current_shares):
+    """Returns a 1-sentence AI evaluation of the proposed trade, or None on failure."""
+    api_key = config("ANTHROPIC_API_KEY", default=None)
+    if not api_key:
+        return None
+
+    total_cost = Decimal(str(quantity)) * Decimal(str(price))
+    prompt = (
+        f"Cash available: ${cash_balance:.2f}. "
+        f"Current {ticker} shares owned: {current_shares}. "
+        f"Proposed trade: {trade_type} {quantity} shares of {ticker} at ${price:.2f} "
+        f"(total ${total_cost:.2f})."
+    )
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=60,
+            system=(
+                "You are a brief trading coach. Write exactly one sentence (max 20 words) "
+                "commenting on this proposed trade relative to the user's current position. "
+                "Be specific and factual. No advice, no questions, no bullet points."
+            ),
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return message.content[0].text.strip() if message.content else None
+    except Exception:
+        return None

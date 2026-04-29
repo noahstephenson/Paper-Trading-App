@@ -15,7 +15,7 @@ import yfinance as yf
 
 from .models import Trade, UserProfile, WatchlistItem, CoachAnalysis
 from .services.portfolio import compute_trade_state
-from .services.ai_coach import get_coach_analysis
+from .services.ai_coach import get_coach_analysis, get_trade_evaluation
 from .services.market_data import get_stock_history, get_stock_info, get_stock_news
 from .services.formatting import format_large_number
 
@@ -648,6 +648,7 @@ def create_trade(request):
     confirm_trade = False
     quoted_price = None
     estimated_total = None
+    trade_evaluation = None
 
     if request.method != 'POST':
         request.session.pop('pending_trade', None)
@@ -763,6 +764,10 @@ def create_trade(request):
                                     quoted_price = price_value
                                     estimated_total = quantity_value * quoted_price
                                     confirm_trade = True
+                                    trade_evaluation = get_trade_evaluation(
+                                        ticker, trade_type, quantity_value, quoted_price,
+                                        cash_balance, current_shares,
+                                    )
                                     request.session['pending_trade'] = {
                                         'ticker': ticker,
                                         'trade_type': trade_type,
@@ -790,6 +795,7 @@ def create_trade(request):
         'confirm_trade': confirm_trade,
         'quoted_price': quoted_price,
         'estimated_total': estimated_total,
+        'trade_evaluation': trade_evaluation,
     })
 
 

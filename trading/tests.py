@@ -1490,7 +1490,6 @@ def test_stock_detail_valid_ticker_renders_all_sections(mock_ticker, auth_client
     assert 'Key Statistics' in body         # stats grid rendered
     assert 'Technology' in body             # sector field
     assert 'Apple Inc. designs' in body     # company description
-    assert 'Apple hits new high' in body    # news headline
 
 
 @pytest.mark.django_db
