@@ -122,17 +122,6 @@
 </div>
 {% endif %}
 
-{% if news_items %}
-<div style="margin-top:24px;">
-    <h3>Recent News</h3>
-    {% for item in news_items %}
-    <div class="news-item">
-        <a href="{{ item.link }}" target="_blank" rel="noopener noreferrer">{{ item.title }}</a>
-        <div style="font-size:0.8rem;color:#666;margin-top:3px;">{{ item.publisher }} &mdash; {{ item.date }}</div>
-    </div>
-    {% endfor %}
-</div>
-{% endif %}
 
 {% endif %}{# end if price #}
 
