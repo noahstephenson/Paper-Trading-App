@@ -15,10 +15,13 @@ from unittest.mock import patch, MagicMock
 import pandas as pd
 import pytest
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 
 from .models import Trade, UserProfile, WatchlistItem, CoachAnalysis
 from .views import fetch_latest_price, get_trade_balances
 from .services.ai_coach import build_portfolio_context, get_coach_analysis
+from .services.formatting import format_large_number
+from .services.market_data import get_stock_history, get_stock_info
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -41,6 +44,11 @@ def auth_client(client, user):
     # Django test client already logged in as `user`, skipping the login form.
     client.force_login(user)
     return client
+
+
+@pytest.fixture(autouse=True)
+def clear_cache():
+    cache.clear()
 
 
 # ── Unit tests: fetch_latest_price ────────────────────────────────────────────
@@ -240,8 +248,6 @@ def test_logout_post_redirects_to_home(auth_client):
 @pytest.mark.django_db
 def test_search_page_shows_price(auth_client):
     """Searching for a ticker should show the fetched price and details."""
-    from django.core.cache import cache
-    cache.clear()
     mock_df = pd.DataFrame(
         {
             'Close': [120.00, 123.45],
@@ -274,8 +280,6 @@ def test_search_page_shows_price(auth_client):
 @pytest.mark.django_db
 def test_search_shows_plotly_chart_for_valid_ticker(auth_client):
     """A valid ticker search should include a Plotly chart in the response."""
-    from django.core.cache import cache
-    cache.clear()
     mock_df = pd.DataFrame(
         {
             'Close': [120.00 + i for i in range(50)],
@@ -451,24 +455,12 @@ def test_buy_is_blocked_when_cash_is_too_low(auth_client, user):
 
 
 @pytest.mark.django_db
-def test_zero_quantity_is_blocked(auth_client):
-    """The app should block trades with a quantity of zero."""
+@pytest.mark.parametrize("qty", ['0', '-5'])
+def test_non_positive_quantity_is_blocked(auth_client, qty):
+    """The app should block trades with a zero or negative quantity."""
     response = auth_client.post('/trade/new/', {
-        'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '0',
+        'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': qty,
     })
-
-    assert response.status_code == 200
-    assert 'Quantity must be greater than zero.' in response.content.decode()
-    assert Trade.objects.count() == 0
-
-
-@pytest.mark.django_db
-def test_negative_quantity_is_blocked(auth_client):
-    """The app should block trades with a negative quantity."""
-    response = auth_client.post('/trade/new/', {
-        'ticker': 'AAPL', 'trade_type': 'BUY', 'quantity': '-5',
-    })
-
     assert response.status_code == 200
     assert 'Quantity must be greater than zero.' in response.content.decode()
     assert Trade.objects.count() == 0
@@ -696,57 +688,21 @@ def test_watchlist_remove_only_own_tickers(auth_client, user, other_user):
 # ── Auth: registration edge cases ─────────────────────────────────────────────
 
 @pytest.mark.django_db
-def test_register_shows_error_for_mismatched_passwords(client):
-    """Mismatched passwords should re-render the form with an error, not create a user."""
+@pytest.mark.parametrize("username,pw1,pw2", [
+    ('newuser',   'StrongPass123!', 'DifferentPass456!'),  # mismatched passwords
+    ('newuser',   'abc',            'abc'),                # too short
+    ('newuser',   'password123',    'password123'),        # common password
+    ('newuser',   '12345678',       '12345678'),           # numeric only
+    ('',          'StrongPass123!', 'StrongPass123!'),     # empty username
+    ('johndoe99', 'johndoe99',      'johndoe99'),          # password similar to username
+])
+def test_register_rejects_invalid_input(client, username, pw1, pw2):
+    """Invalid registration inputs should re-render the form without creating a user."""
     response = client.post('/accounts/register/', {
-        'username': 'newuser',
-        'password1': 'StrongPass123!',
-        'password2': 'DifferentPass456!',
+        'username': username, 'password1': pw1, 'password2': pw2,
     })
-
     assert response.status_code == 200
-    assert not get_user_model().objects.filter(username='newuser').exists()
-    body = response.content.decode()
-    assert 'password' in body.lower()
-
-
-@pytest.mark.django_db
-def test_register_shows_error_for_too_short_password(client):
-    """A password shorter than 8 characters should fail validation."""
-    response = client.post('/accounts/register/', {
-        'username': 'newuser',
-        'password1': 'abc',
-        'password2': 'abc',
-    })
-
-    assert response.status_code == 200
-    assert not get_user_model().objects.filter(username='newuser').exists()
-
-
-@pytest.mark.django_db
-def test_register_shows_error_for_common_password(client):
-    """A commonly used password like 'password123' should be rejected."""
-    response = client.post('/accounts/register/', {
-        'username': 'newuser',
-        'password1': 'password123',
-        'password2': 'password123',
-    })
-
-    assert response.status_code == 200
-    assert not get_user_model().objects.filter(username='newuser').exists()
-
-
-@pytest.mark.django_db
-def test_register_shows_error_for_numeric_only_password(client):
-    """A password made entirely of numbers should be rejected."""
-    response = client.post('/accounts/register/', {
-        'username': 'newuser',
-        'password1': '12345678',
-        'password2': '12345678',
-    })
-
-    assert response.status_code == 200
-    assert not get_user_model().objects.filter(username='newuser').exists()
+    assert not get_user_model().objects.filter(username=username).exists()
 
 
 @pytest.mark.django_db
@@ -762,32 +718,6 @@ def test_register_shows_error_for_duplicate_username(client):
 
     assert response.status_code == 200
     assert get_user_model().objects.filter(username='taken').count() == 1
-
-
-@pytest.mark.django_db
-def test_register_shows_error_for_empty_username(client):
-    """Submitting an empty username should re-render the form with errors."""
-    response = client.post('/accounts/register/', {
-        'username': '',
-        'password1': 'StrongPass123!',
-        'password2': 'StrongPass123!',
-    })
-
-    assert response.status_code == 200
-    assert get_user_model().objects.count() == 0
-
-
-@pytest.mark.django_db
-def test_register_shows_error_for_password_similar_to_username(client):
-    """A password that's too similar to the username should be rejected."""
-    response = client.post('/accounts/register/', {
-        'username': 'johndoe99',
-        'password1': 'johndoe99',
-        'password2': 'johndoe99',
-    })
-
-    assert response.status_code == 200
-    assert not get_user_model().objects.filter(username='johndoe99').exists()
 
 
 @pytest.mark.django_db
@@ -960,7 +890,10 @@ def test_sell_owned_shares_completes_two_step_flow(auth_client, user):
         review = auth_client.post('/trade/new/', {
             'ticker': 'TSLA', 'trade_type': 'SELL', 'quantity': '3',
         })
-        assert response_contains_all(review, ['Confirm Trade', '$220.00', '$660.00'])
+        review_body = review.content.decode()
+        assert 'Confirm Trade' in review_body
+        assert '$220.00' in review_body
+        assert '$660.00' in review_body
 
         # Step 2: confirm
         confirm = auth_client.post('/trade/new/', {'form_action': 'confirm'}, follow=True)
@@ -971,12 +904,6 @@ def test_sell_owned_shares_completes_two_step_flow(auth_client, user):
     assert sell.ticker == 'TSLA'
     assert sell.quantity == 3
     assert sell.price == Decimal('220.00')
-
-
-def response_contains_all(response, strings):
-    """Helper: return True if all strings appear in the response body."""
-    body = response.content.decode()
-    return all(s in body for s in strings)
 
 
 # ── Trade Rationale Journal ────────────────────────────────────────────────────
@@ -1175,15 +1102,9 @@ def test_build_portfolio_context_correct_structure(mock_ticker, user):
 
     ctx = build_portfolio_context(user)
 
-    assert 'cash_balance' in ctx
-    assert 'starting_balance' in ctx
-    assert 'total_portfolio_value' in ctx
-    assert 'total_return_pct' in ctx
-    assert 'holdings' in ctx
-    assert 'recent_trades' in ctx
-    assert 'trade_count_total' in ctx
-    assert 'trade_count_30d' in ctx
-    assert 'concentration' in ctx
+    expected_keys = {'cash_balance', 'starting_balance', 'total_portfolio_value', 'total_return_pct',
+                     'holdings', 'recent_trades', 'trade_count_total', 'trade_count_30d', 'concentration'}
+    assert expected_keys <= ctx.keys()
     assert ctx['trade_count_total'] == 1
     assert len(ctx['holdings']) == 1
     assert ctx['holdings'][0]['ticker'] == 'AAPL'
@@ -1281,53 +1202,18 @@ def test_missing_api_key_returns_friendly_message(mock_config, user):
 
 # ── format_large_number unit tests ────────────────────────────────────────────
 
-def test_format_large_number_returns_dash_for_none():
-    """None input should return the '—' placeholder string."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(None) == '—'
-
-
-def test_format_large_number_returns_dash_for_non_numeric():
-    """A non-numeric string should return '—' rather than crash."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number('not a number') == '—'
-
-
-def test_format_large_number_handles_zero():
-    """Zero should return the plain string '0'."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(0) == '0'
-
-
-def test_format_large_number_handles_small_number():
-    """A value below 1,000 should be returned as a plain integer string."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(999) == '999'
-
-
-def test_format_large_number_handles_thousands():
-    """A value in the thousands range should use the K suffix."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(1_500) == '1.5K'
-
-
-def test_format_large_number_handles_billions():
-    """A value in the billions range should use the B suffix."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(2_500_000_000) == '2.5B'
-
-
-def test_format_large_number_handles_trillions():
-    """A value in the trillions range should use the T suffix."""
-    from trading.services.formatting import format_large_number
-    assert format_large_number(3_000_000_000_000) == '3.0T'
-
-
-def test_format_large_number_handles_negative():
-    """Negative numbers should be formatted with a leading minus sign."""
-    from trading.services.formatting import format_large_number
-    result = format_large_number(-2_500_000_000)
-    assert result == '-2.5B'
+@pytest.mark.parametrize("value,expected", [
+    (None,                  '—'),
+    ('not a number',        '—'),
+    (0,                     '0'),
+    (999,                   '999'),
+    (1_500,                 '1.5K'),
+    (2_500_000_000,         '2.5B'),
+    (3_000_000_000_000,     '3.0T'),
+    (-2_500_000_000,        '-2.5B'),
+])
+def test_format_large_number(value, expected):
+    assert format_large_number(value) == expected
 
 
 # ── market_data caching unit tests ────────────────────────────────────────────
@@ -1335,10 +1221,6 @@ def test_format_large_number_handles_negative():
 @patch('trading.services.market_data.yf.Ticker')
 def test_get_stock_history_caches_valid_result(mock_ticker):
     """A second call with the same args should use the cache — yfinance called only once."""
-    from django.core.cache import cache
-    from trading.services.market_data import get_stock_history
-    cache.clear()
-
     mock_df = pd.DataFrame(
         {'Close': [100.0], 'High': [101.0], 'Low': [99.0], 'Open': [100.0], 'Volume': [1_000_000]},
         index=pd.date_range('2024-01-02', periods=1),
@@ -1354,10 +1236,6 @@ def test_get_stock_history_caches_valid_result(mock_ticker):
 @patch('trading.services.market_data.yf.Ticker')
 def test_get_stock_history_caches_empty_result_for_invalid_ticker(mock_ticker):
     """An invalid ticker (empty DataFrame) is cached to avoid hammering yfinance."""
-    from django.core.cache import cache
-    from trading.services.market_data import get_stock_history
-    cache.clear()
-
     mock_ticker.return_value.history.return_value = pd.DataFrame()
 
     get_stock_history('ZZZBADTICKER', '2d')
@@ -1369,11 +1247,7 @@ def test_get_stock_history_caches_empty_result_for_invalid_ticker(mock_ticker):
 @patch('trading.services.market_data.yf.Ticker')
 def test_get_stock_info_returns_empty_dict_on_exception(mock_ticker):
     """When yf.Ticker().info raises, get_stock_info returns {} without propagating the error."""
-    from django.core.cache import cache
     from unittest.mock import PropertyMock
-    from trading.services.market_data import get_stock_info
-    cache.clear()
-
     type(mock_ticker.return_value).info = PropertyMock(side_effect=Exception('network error'))
 
     result = get_stock_info('ERRTEST')
@@ -1402,8 +1276,6 @@ def _make_hist_df(rows=5):
 @patch('trading.services.market_data.yf.Ticker')
 def test_stock_detail_invalid_ticker_shows_error_not_crash(mock_ticker, auth_client):
     """An invalid ticker (empty history) shows an error message and returns 200."""
-    from django.core.cache import cache
-    cache.clear()
     mock_ticker.return_value.history.return_value = pd.DataFrame()
 
     response = auth_client.get('/stock/ZZZZ/')
@@ -1416,9 +1288,6 @@ def test_stock_detail_invalid_ticker_shows_error_not_crash(mock_ticker, auth_cli
 @patch('trading.services.market_data.yf.Ticker')
 def test_stock_detail_empty_info_shows_stats_error(mock_ticker, auth_client):
     """When .info returns {}, stats_error is displayed and the page does not crash."""
-    from django.core.cache import cache
-    cache.clear()
-
     def history_side_effect(period=None, interval='1d', **kwargs):
         return _make_hist_df(rows=2)
 
@@ -1436,9 +1305,6 @@ def test_stock_detail_empty_info_shows_stats_error(mock_ticker, auth_client):
 @patch('trading.services.market_data.yf.Ticker')
 def test_stock_detail_sparse_info_shows_dashes_not_none(mock_ticker, auth_client):
     """Missing .info fields render as '—' in the stats grid — never as Python 'None'."""
-    from django.core.cache import cache
-    cache.clear()
-
     def history_side_effect(period=None, interval='1d', **kwargs):
         return _make_hist_df(rows=50 if period == '5y' else 2)
 
@@ -1458,9 +1324,6 @@ def test_stock_detail_sparse_info_shows_dashes_not_none(mock_ticker, auth_client
 @patch('trading.services.market_data.yf.Ticker')
 def test_stock_detail_valid_ticker_renders_all_sections(mock_ticker, auth_client):
     """A fully-mocked valid ticker renders company name, stats, description, and news."""
-    from django.core.cache import cache
-    cache.clear()
-
     def history_side_effect(period=None, interval='1d', **kwargs):
         return _make_hist_df(rows=50 if period == '5y' else 2)
 
@@ -1496,9 +1359,6 @@ def test_stock_detail_valid_ticker_renders_all_sections(mock_ticker, auth_client
 @patch('trading.services.market_data.yf.Ticker')
 def test_stock_detail_graceful_degradation_when_5y_history_fails(mock_ticker, auth_client):
     """When 5Y history returns empty, chart_error is shown but key stats still render."""
-    from django.core.cache import cache
-    cache.clear()
-
     def history_side_effect(period=None, interval='1d', **kwargs):
         if period == '2d':
             return _make_hist_df(rows=2)
