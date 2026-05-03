@@ -1,7 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 
-from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.shortcuts import redirect, render
@@ -56,8 +55,6 @@ def get_trade_balances(user, ticker, starting_cash):
                 current_shares -= trade.quantity
 
     return cash_balance, current_shares
-
-
 
 
 def _build_key_stats(info):
@@ -309,8 +306,6 @@ def build_portfolio_history(trades, starting_cash=STARTING_CASH):
     Build a daily portfolio value series using trade history and yfinance price data.
     Returns (dates_list, values_list) for Plotly, or (None, None) if insufficient data.
     """
-    import pandas as pd
-
     if not trades:
         return None, None
 
@@ -422,7 +417,6 @@ def index(request):
     recent_trades = Trade.objects.filter(user=request.user).order_by('-created_at')[:5]
 
     return render(request, 'trading/index.html', {
-        'starting_cash': STARTING_CASH,
         'total_portfolio_value': total_portfolio_value,
         'cash_balance': cash_balance,
         'unrealized_gain': unrealized_gain,
